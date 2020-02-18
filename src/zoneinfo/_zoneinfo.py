@@ -84,7 +84,6 @@ class IANAZone(tzinfo):
             # Detect fold
             shift = tti_prev[0] - tti[0]
             fold = shift > timedelta(0, timestamp - self.trans_utc[idx - 1])
-
         dt += tti.utcoff
         if fold:
             return dt.replace(fold=1)
@@ -101,7 +100,10 @@ class IANAZone(tzinfo):
         elif ts > lt[-1]:
             return self._tz_after.get_trans_info(ts, dt.year, dt.fold)
         else:
-            idx = bisect.bisect_right(lt, timestamp)
+            # idx is the transition that occurs after this timestamp, so we
+            # subtract off 1 to get the current ttinfo
+            idx = bisect.bisect_right(lt, ts) - 1
+            assert idx >= 0
             return self._ttinfos[idx]
 
     def _get_local_timestamp(self, dt):
@@ -225,8 +227,16 @@ class IANAZone(tzinfo):
             isdst = ()
             abbrind = ()
 
-        # Now read the abbreviations, they are null-terminated strings
-        abbr_vals = fobj.read(charcnt).decode().split("\x00")
+        # Now read the abbreviations. They are null-terminated strings, indexed
+        # not by position in the array but by position in the unsplit
+        # abbreviation string. I suppose this makes more sense in C, which uses
+        # null to terminate the strings, but it's inconvenient here...
+        char_total = 0
+        abbr_vals = {}
+        for abbr in fobj.read(charcnt).decode().split("\x00"):
+            abbr_vals[char_total] = abbr
+            char_total += len(abbr) + 1
+
         abbr = [abbr_vals[idx] for idx in abbrind]
 
         # The remainder of the file consists of leap seconds (currently unused) and
@@ -269,7 +279,7 @@ class IANAZone(tzinfo):
         dst_cnt = sum(isdsts)
         dst_found = 0
 
-        for i in range(1, len(trans_idx)):
+        for idx in range(1, len(trans_idx)):
             if dst_cnt == dst_found:
                 break
 
@@ -291,8 +301,8 @@ class IANAZone(tzinfo):
             if not isdsts[comp_idx]:
                 dstoff = utcoff - utcoffsets[comp_idx]
 
-            if not dstoff and i < (typecnt - 1):
-                comp_idx = i + 1
+            if not dstoff and idx < (typecnt - 1):
+                comp_idx = idx + 1
 
                 # If the following transition is also DST and we couldn't
                 # find the DST offset by this point, we're going ot have to
