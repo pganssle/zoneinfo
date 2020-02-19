@@ -6,12 +6,13 @@ import struct
 import unittest
 from zoneinfo import IANAZone
 
+
 class IANAZoneTest(unittest.TestCase):
     def _load_local_file(self, key):
         f = load_zoneinfo_file(key)
         return IANAZone.from_file(f, key=key)
 
-    def test_dublin(self):
+    def test_dublin_offsets(self):
         tzi = self._load_local_file("Europe/Dublin")
 
         DMT = ("DMT", timedelta(seconds=-1521), timedelta(hours=0))
@@ -22,6 +23,7 @@ class IANAZoneTest(unittest.TestCase):
         IST_1 = ("IST", timedelta(hours=1), timedelta(0))
 
         test_cases = [
+            # Unambiguous
             (datetime(1800, 1, 1, tzinfo=tzi), DMT),
             (datetime(1916, 4, 1, tzinfo=tzi), DMT),
             (datetime(1916, 5, 21, 1, tzinfo=tzi), DMT),
@@ -32,14 +34,32 @@ class IANAZoneTest(unittest.TestCase):
             (datetime(2023, 2, 14, 0, tzinfo=tzi), GMT_1),
             (datetime(2023, 6, 18, 0, tzinfo=tzi), IST_1),
             (datetime(2023, 11, 17, 0, tzinfo=tzi), GMT_1),
+            # After 2038: Requires version 2 file
             (datetime(2487, 3, 1, 0, tzinfo=tzi), GMT_1),
             (datetime(2487, 6, 1, 0, tzinfo=tzi), IST_1),
+            # Gaps
+            (datetime(1916, 5, 21, 2, 25, 21, fold=0, tzinfo=tzi), DMT),
+            (datetime(1916, 5, 21, 2, 25, 21, fold=1, tzinfo=tzi), IST_0),
+            (datetime(1917, 4, 8, 1, 30, tzinfo=tzi), GMT_0),
+            (datetime(1917, 4, 8, 2, 30, fold=0, tzinfo=tzi), GMT_0),
+            (datetime(1917, 4, 8, 2, 30, fold=1, tzinfo=tzi), BST),
+            (datetime(2024, 3, 31, 1, 30, fold=0, tzinfo=tzi), GMT_1),
+            (datetime(2024, 3, 31, 1, 30, fold=1, tzinfo=tzi), IST_1),
+            (datetime(2823, 3, 26, 1, 30, fold=0, tzinfo=tzi), GMT_1),
+            (datetime(2823, 3, 26, 1, 30, fold=1, tzinfo=tzi), IST_1),
+            # Folds
+            (datetime(2024, 10, 27, 1, 30, fold=0, tzinfo=tzi), IST_1),
+            (datetime(2024, 10, 27, 1, 30, fold=1, tzinfo=tzi), GMT_1),
+            (datetime(2823, 10, 29, 1, 30, fold=0, tzinfo=tzi), IST_1),
+            (datetime(2823, 10, 29, 1, 30, fold=1, tzinfo=tzi), GMT_1),
         ]
 
         for dt, (tzname, utcoff, dst) in test_cases:
-            self.assertEqual(dt.tzname(), tzname)
-            self.assertEqual(dt.utcoffset(), utcoff)
-            self.assertEqual(dt.dst(), dst)
+            with self.subTest(dt=dt, tzname=tzname):
+                self.assertEqual(dt.tzname(), tzname)
+                self.assertEqual(dt.utcoffset(), utcoff)
+                self.assertEqual(dt.dst(), dst)
+
 
 class TZStrTest(unittest.TestCase):
     def _zone_from_tzstr(self, tzstr):
