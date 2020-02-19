@@ -412,7 +412,16 @@ class _TZStr:
     def _get_trans_info_dst(self, ts, year, fold):
         """Get the information about the current transition - tti"""
         start, end = self.transitions(year)
-        if fold:
+
+        # With fold = 0, the period (denominated in local time) with the
+        # smaller offset starts at the end of the gap and ends at the end of
+        # the fold; with fold = 1, it runs from the start of the gap to the
+        # beginning of the fold.
+        #
+        # So in order to determine the DST boundaries we need to know both
+        # the fold and whether DST is positive or negative (rare), and it
+        # turns out that this boils down to fold XOR is_positive.
+        if fold == (self.dst_diff >= 0):
             end -= self.dst_diff
         else:
             start += self.dst_diff
