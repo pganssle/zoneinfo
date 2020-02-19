@@ -213,7 +213,25 @@ class TZStrTest(unittest.TestCase):
                     # fmt: on
                 ],
             ),
-            # TODO: Dublin
+            (
+                "IST-1GMT0,M10.5.0,M3.5.0/1",
+                [
+                    # fmt: off
+                    (datetime(2019, 3, 30), "GMT", timedelta(hours=0)),
+                    (datetime(2019, 3, 31, 0, 59), "GMT", timedelta(hours=0)),
+                    (datetime(2019, 3, 31, 2, 0), "IST", timedelta(hours=1)),
+                    (datetime(2019, 10, 26), "IST", timedelta(hours=1)),
+                    (datetime(2019, 10, 27, 0, 59, fold=1), "IST", timedelta(hours=1)),
+                    (datetime(2019, 10, 27, 1, 0, fold=0), "IST", timedelta(hours=1)),
+                    (datetime(2019, 10, 27, 2, 0, fold=1), "GMT", timedelta(hours=0)),
+                    (datetime(2020, 3, 29, 0, 59), "GMT", timedelta(hours=0)),
+                    (datetime(2020, 3, 29, 2, 0), "IST", timedelta(hours=1)),
+                    (datetime(2020, 10, 25, 0, 59, fold=1), "IST", timedelta(hours=1)),
+                    (datetime(2020, 10, 25, 1, 0, fold=0), "IST", timedelta(hours=1)),
+                    (datetime(2020, 10, 25, 2, 0, fold=1), "GMT", timedelta(hours=0)),
+                    # fmt: on
+                ],
+            ),
         ]
 
         for tzstr, test_values in test_cases:
