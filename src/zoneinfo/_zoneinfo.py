@@ -341,8 +341,14 @@ class IANAZone(tzinfo):
         trans_list_wall[1][0] += offset
 
         for i in range(1, len(trans_idx)):
-            trans_list_wall[0][i] += utcoffsets[trans_idx[i - 1]]
-            trans_list_wall[1][i] += utcoffsets[trans_idx[i]]
+            offset_0 = utcoffsets[trans_idx[i - 1]]
+            offset_1 = utcoffsets[trans_idx[i]]
+
+            if offset_1 > offset_0:
+                offset_1, offset_0 = offset_0, offset_1
+
+            trans_list_wall[0][i] += offset_0
+            trans_list_wall[1][i] += offset_1
 
         return trans_list_wall
 
