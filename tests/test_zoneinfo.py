@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta, time, timezone
 import base64
 import io
 import lzma
 import struct
 import unittest
+from datetime import datetime, time, timedelta, timezone
+
 from zoneinfo import IANAZone
 
 
