@@ -1,9 +1,9 @@
 import bisect
 import calendar
+import importlib.resources
 import os
 import re
 import struct
-
 from datetime import datetime, timedelta, timezone, tzinfo
 
 TZPATHS = [
@@ -33,8 +33,11 @@ class IANAZone(tzinfo):
         self._key = key
         self._file_path = self._find_tzfile(key)
 
-        with open(self._file_path, "rb") as f:
-            self._load_file(f)
+        if self._file_path is not None:
+            with open(self._file_path, "rb") as f:
+                self._load_file(f)
+        else:
+            self._load_tzdata(key)
 
     @classmethod
     def from_file(cls, fobj, key=None):
@@ -44,6 +47,20 @@ class IANAZone(tzinfo):
         obj._load_file(fobj)
 
         return obj
+
+    def _load_tzdata(self, key):
+        # TODO: Proper error for malformed keys?
+        components = key.split("/")
+        package_name = ".".join(["tzdata.zoneinfo"] + components[:-1])
+        resource_name = components[-1]
+
+        try:
+            fobj = importlib.resources.open_binary(package_name, resource_name)
+        except (ImportError, FileNotFoundError) as e:
+            raise ValueError(f"No time zone found with key {key}") from e
+
+        with fobj as f:
+            self._load_file(f)
 
     # TODO: Handle `datetime.time` in these calls
     def utcoffset(self, dt):
@@ -124,14 +141,12 @@ class IANAZone(tzinfo):
         return f"{self.__class__.__name__}(file_path={self._file_path!r}, key={self._key!r})"
 
     def _find_tzfile(self, key):
-        key_path = key.split("/")
-
         for search_path in TZPATHS:
             filepath = os.path.join(search_path, key)
             if os.path.isfile(filepath):
                 return filepath
 
-        raise ValueError(f"No time zone found with key {filepath}.")
+        return None
 
     def _load_file(self, fobj):
         # Retrieve all the data as it exists in the zoneinfo file
