@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import base64
+import dataclasses
 import io
 import lzma
 import struct
@@ -7,59 +10,99 @@ from datetime import datetime, time, timedelta, timezone
 
 from zoneinfo import IANAZone
 
+# Useful constants
+ZERO = timedelta(0)
+ONE_H = timedelta(hours=1)
+
 
 class IANAZoneTest(unittest.TestCase):
-    def _load_local_file(self, key):
+    def zone_from_key(self, key):
         f = ZoneDumpData.load_zoneinfo_file(key)
         return IANAZone.from_file(f, key=key)
 
-    def test_dublin_offsets(self):
-        tzi = self._load_local_file("Europe/Dublin")
+    def zones(self):
+        return ["Europe/Dublin"]
 
-        DMT = ("DMT", timedelta(seconds=-1521), timedelta(hours=0))
-        IST_0 = ("IST", timedelta(seconds=2079), timedelta(hours=1))
-        GMT_0 = ("GMT", timedelta(0), timedelta(0))
-        BST = ("BST", timedelta(hours=1), timedelta(hours=1))
-        GMT_1 = ("GMT", timedelta(0), timedelta(hours=-1))
-        IST_1 = ("IST", timedelta(hours=1), timedelta(0))
+    def test_unambiguous(self):
+        test_cases = []
+        for key in self.zones():
+            for zone_transition in ZoneDumpData.load_transition_examples(key):
+                test_cases.append(
+                    (
+                        key,
+                        zone_transition.transition - timedelta(days=2),
+                        zone_transition.offset_before,
+                    )
+                )
 
-        test_cases = [
-            # Unambiguous
-            (datetime(1800, 1, 1, tzinfo=tzi), DMT),
-            (datetime(1916, 4, 1, tzinfo=tzi), DMT),
-            (datetime(1916, 5, 21, 1, tzinfo=tzi), DMT),
-            (datetime(1916, 5, 21, 4, tzinfo=tzi), IST_0),
-            (datetime(1916, 10, 2, 0, tzinfo=tzi), GMT_0),
-            (datetime(1917, 4, 7, 0, tzinfo=tzi), GMT_0),
-            (datetime(1917, 4, 9, 0, tzinfo=tzi), BST),
-            (datetime(2023, 2, 14, 0, tzinfo=tzi), GMT_1),
-            (datetime(2023, 6, 18, 0, tzinfo=tzi), IST_1),
-            (datetime(2023, 11, 17, 0, tzinfo=tzi), GMT_1),
-            # After 2038: Requires version 2 file
-            (datetime(2487, 3, 1, 0, tzinfo=tzi), GMT_1),
-            (datetime(2487, 6, 1, 0, tzinfo=tzi), IST_1),
-            # Gaps
-            (datetime(1916, 5, 21, 2, 25, 21, fold=0, tzinfo=tzi), DMT),
-            (datetime(1916, 5, 21, 2, 25, 21, fold=1, tzinfo=tzi), IST_0),
-            (datetime(1917, 4, 8, 1, 30, tzinfo=tzi), GMT_0),
-            (datetime(1917, 4, 8, 2, 30, fold=0, tzinfo=tzi), GMT_0),
-            (datetime(1917, 4, 8, 2, 30, fold=1, tzinfo=tzi), BST),
-            (datetime(2024, 3, 31, 1, 30, fold=0, tzinfo=tzi), GMT_1),
-            (datetime(2024, 3, 31, 1, 30, fold=1, tzinfo=tzi), IST_1),
-            (datetime(2823, 3, 26, 1, 30, fold=0, tzinfo=tzi), GMT_1),
-            (datetime(2823, 3, 26, 1, 30, fold=1, tzinfo=tzi), IST_1),
-            # Folds
-            (datetime(2024, 10, 27, 1, 30, fold=0, tzinfo=tzi), IST_1),
-            (datetime(2024, 10, 27, 1, 30, fold=1, tzinfo=tzi), GMT_1),
-            (datetime(2823, 10, 29, 1, 30, fold=0, tzinfo=tzi), IST_1),
-            (datetime(2823, 10, 29, 1, 30, fold=1, tzinfo=tzi), GMT_1),
-        ]
+                test_cases.append(
+                    (
+                        key,
+                        zone_transition.transition + timedelta(days=2),
+                        zone_transition.offset_after,
+                    )
+                )
 
-        for dt, (tzname, utcoff, dst) in test_cases:
-            with self.subTest(dt=dt, tzname=tzname):
-                self.assertEqual(dt.tzname(), tzname)
-                self.assertEqual(dt.utcoffset(), utcoff)
-                self.assertEqual(dt.dst(), dst)
+        for key, dt, offset in test_cases:
+            with self.subTest(key=key, dt=dt, offset=offset):
+                tzi = self.zone_from_key(key)
+                dt = dt.replace(tzinfo=tzi)
+
+                self.assertEqual(dt.tzname(), offset.tzname)
+                self.assertEqual(dt.utcoffset(), offset.utcoffset)
+                self.assertEqual(dt.dst(), offset.dst)
+
+    def test_folds_and_gaps(self):
+        test_cases = []
+        for key in self.zones():
+            tests = {"folds": [], "gaps": []}
+            for zt in ZoneDumpData.load_transition_examples(key):
+                if zt.fold:
+                    test_group = tests["folds"]
+                elif zt.gap:
+                    test_group = tests["gaps"]
+                else:
+                    continue
+
+                # Cases are of the form key, dt, fold, offset
+                dt = zt.anomaly_start - timedelta(seconds=1)
+                test_group.append((dt, 0, zt.offset_before))
+                test_group.append((dt, 1, zt.offset_before))
+
+                dt = zt.anomaly_start
+                test_group.append((dt, 0, zt.offset_before))
+                test_group.append((dt, 1, zt.offset_after))
+
+                dt = zt.anomaly_start + timedelta(seconds=1)
+                test_group.append((dt, 0, zt.offset_before))
+                test_group.append((dt, 1, zt.offset_after))
+
+                dt = zt.anomaly_end - timedelta(seconds=1)
+                test_group.append((dt, 0, zt.offset_before))
+                test_group.append((dt, 1, zt.offset_after))
+
+                dt = zt.anomaly_end
+                test_group.append((dt, 0, zt.offset_after))
+                test_group.append((dt, 1, zt.offset_after))
+
+                dt = zt.anomaly_end + timedelta(seconds=1)
+                test_group.append((dt, 0, zt.offset_after))
+                test_group.append((dt, 1, zt.offset_after))
+
+            for grp, test_group in tests.items():
+                test_cases.extend(
+                    [((key, grp), test_case) for test_case in test_group]
+                )
+
+        for grp, (dt, fold, offset) in test_cases:
+            with self.subTest(grp=grp, dt=dt, fold=fold, offset=offset):
+                key = grp[0]
+                tzi = self.zone_from_key(key)
+                dt = dt.replace(fold=fold, tzinfo=tzi)
+
+                self.assertEqual(dt.tzname(), offset.tzname)
+                self.assertEqual(dt.utcoffset(), offset.utcoffset)
+                self.assertEqual(dt.dst(), offset.dst)
 
 
 class TZStrTest(unittest.TestCase):
@@ -246,7 +289,60 @@ class TZStrTest(unittest.TestCase):
                     self.assertEqual(dt.utcoffset(), expected_tzoffset)
 
 
+@dataclasses.dataclass
+class ZoneOffset:
+    tzname: str
+    utcoffset: timedelta
+    dst: timedelta = ZERO
+
+
+@dataclasses.dataclass
+class ZoneTransition:
+    transition: datetime
+    offset_before: ZoneOffset
+    offset_after: ZoneOffset
+
+    @property
+    def fold(self):
+        """Whether this introduces a fold"""
+        return self.offset_before.utcoffset > self.offset_after.utcoffset
+
+    @property
+    def gap(self):
+        """Whether this introduces a gap"""
+        return self.offset_before.utcoffset < self.offset_after.utcoffset
+
+    @property
+    def delta(self):
+        return self.offset_after.utcoffset - self.offset_before.utcoffset
+
+    @property
+    def anomaly_start(self):
+        if self.fold:
+            return self.transition + self.delta
+        else:
+            return self.transition
+
+    @property
+    def anomaly_end(self):
+        if not self.fold:
+            return self.transition + self.delta
+        else:
+            return self.transition
+
+
+BREAK_ONCE = 0
+
+
 class ZoneDumpData:
+    @classmethod
+    def transition_keys(cls):
+        return cls._get_zonedump().keys()
+
+    @classmethod
+    def load_transition_examples(cls, key):
+        return cls._get_zonedump()[key]
+
     @classmethod
     def load_zoneinfo_file(cls, key):
         if key not in cls.ZONEFILES:
@@ -258,6 +354,66 @@ class ZoneDumpData:
         decompressed = lzma.decompress(decoded)
 
         return io.BytesIO(decompressed)
+
+    # These are examples of a bunch of transitions that can be used in tests
+    # The format for each transition is:
+    #
+    @classmethod
+    def _get_zonedump(cls):
+        if not cls._ZONEDUMP_DATA:
+            cls._populate_zonedump_data()
+        return cls._ZONEDUMP_DATA
+
+    @classmethod
+    def _populate_zonedump_data(cls):
+        def _America_Los_Angeles():
+            LMT = ZoneOffset("LMT", timedelta(seconds=-28378), ZERO)
+            PST = ZoneOffset("PST", timedelta(hours=-8), ZERO)
+            PDT = ZoneOffset("PDT", timedelta(hours=-7), ONE_H)
+            PWT = ZoneOffset("PWT", timedelta(hours=-7), ONE_H)
+            PPT = ZoneOffset("PPT", timedelta(hours=-7), ONE_H)
+
+            return [
+                ZoneTransition(datetime(1883, 11, 18, 12, 7, 2), LMT, PST),
+                ZoneTransition(datetime(1918, 3, 31, 2), PST, PDT),
+                ZoneTransition(datetime(1918, 3, 31, 2), PST, PDT),
+                ZoneTransition(datetime(1918, 10, 27, 2), PDT, PST),
+                # Transition to Pacific War Time
+                ZoneTransition(datetime(1942, 2, 9, 2), PST, PWT),
+                # Transition from Pacific War Time to Pacific Peace Time
+                ZoneTransition(datetime(1945, 8, 14, 16), PWT, PPT),
+                ZoneTransition(datetime(1945, 9, 30, 2), PPT, PST),
+                ZoneTransition(datetime(2015, 3, 8, 2), PST, PDT),
+                ZoneTransition(datetime(2015, 11, 1, 2), PDT, PST),
+                # After 2038: Rules continue indefinitely
+                ZoneTransition(datetime(2450, 3, 13, 2), PST, PDT),
+                ZoneTransition(datetime(2450, 11, 6, 2), PDT, PST),
+            ]
+
+        def _Europe_Dublin():
+            DMT = ZoneOffset("DMT", timedelta(seconds=-1521), ZERO)
+            IST_0 = ZoneOffset("IST", timedelta(seconds=2079), ONE_H)
+            GMT_0 = ZoneOffset("GMT", ZERO, ZERO)
+            BST = ZoneOffset("BST", ONE_H, ONE_H)
+            GMT_1 = ZoneOffset("GMT", ZERO, -ONE_H)
+            IST_1 = ZoneOffset("IST", ONE_H, ZERO)
+
+            return [
+                ZoneTransition(datetime(1916, 5, 21, 2), DMT, IST_0),
+                ZoneTransition(datetime(1916, 10, 1, 3), IST_0, GMT_0),
+                ZoneTransition(datetime(1917, 4, 8, 2), GMT_0, BST),
+                ZoneTransition(datetime(2016, 3, 27, 1), GMT_1, IST_1),
+                ZoneTransition(datetime(2016, 10, 30, 2), IST_1, GMT_1),
+                ZoneTransition(datetime(2487, 3, 30, 1), GMT_1, IST_1),
+                ZoneTransition(datetime(2487, 10, 26, 2), IST_1, GMT_1),
+            ]
+
+        cls._ZONEDUMP_DATA = {
+            "America/Los_Angeles": _America_Los_Angeles(),
+            "Europe/Dublin": _Europe_Dublin(),
+        }
+
+    _ZONEDUMP_DATA = {}
 
     ###
     #
