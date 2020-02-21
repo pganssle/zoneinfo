@@ -90,19 +90,18 @@ class IANAZoneTest(unittest.TestCase):
                 test_group.append((dt, 1, zt.offset_after))
 
             for grp, test_group in tests.items():
-                test_cases.extend(
-                    [((key, grp), test_case) for test_case in test_group]
-                )
+                test_cases.append(((key, grp), test_group))
 
-        for grp, (dt, fold, offset) in test_cases:
-            with self.subTest(grp=grp, dt=dt, fold=fold, offset=offset):
-                key = grp[0]
+        for (key, grp), tests in test_cases:
+            with self.subTest(key=key, grp=grp):
                 tzi = self.zone_from_key(key)
-                dt = dt.replace(fold=fold, tzinfo=tzi)
 
-                self.assertEqual(dt.tzname(), offset.tzname)
-                self.assertEqual(dt.utcoffset(), offset.utcoffset)
-                self.assertEqual(dt.dst(), offset.dst)
+                for dt, fold, offset in tests:
+                    dt = dt.replace(fold=fold, tzinfo=tzi)
+
+                    self.assertEqual(dt.tzname(), offset.tzname)
+                    self.assertEqual(dt.utcoffset(), offset.utcoffset)
+                    self.assertEqual(dt.dst(), offset.dst)
 
 
 class TZStrTest(unittest.TestCase):
