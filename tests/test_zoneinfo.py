@@ -391,6 +391,7 @@ class ZoneDumpData:
             ]
 
         def _Europe_Dublin():
+            LMT = ZoneOffset("LMT", timedelta(seconds=-1500), ZERO)
             DMT = ZoneOffset("DMT", timedelta(seconds=-1521), ZERO)
             IST_0 = ZoneOffset("IST", timedelta(seconds=2079), ONE_H)
             GMT_0 = ZoneOffset("GMT", ZERO, ZERO)
@@ -399,6 +400,7 @@ class ZoneDumpData:
             IST_1 = ZoneOffset("IST", ONE_H, ZERO)
 
             return [
+                ZoneTransition(datetime(1880, 8, 2, 0), LMT, DMT),
                 ZoneTransition(datetime(1916, 5, 21, 2), DMT, IST_0),
                 ZoneTransition(datetime(1916, 10, 1, 3), IST_0, GMT_0),
                 ZoneTransition(datetime(1917, 4, 8, 2), GMT_0, BST),
