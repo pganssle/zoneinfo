@@ -137,6 +137,14 @@ class TzPathUserMixin:
     not HAS_TZDATA_PKG, "Skipping tzdata-specific tests: tzdata not installed"
 )
 class TZDataTests(IANAZoneTest, TzPathUserMixin):
+    """
+    Runs all the IANAZoneTest tests, but against the tzdata package
+
+    NOTE: The ZoneDumpData has frozen test data, but tzdata will update, so
+    some of the tests (particularly those related to the far future) may break
+    in the event that the time zone policies in the relevant time zones change.
+    """
+
     def setUp(self):
         super().setUp()
         self._old_tz_path = tuple(zoneinfo.TZPATHS)
@@ -410,6 +418,7 @@ class ZoneDumpData:
 
     @classmethod
     def _populate_zonedump_data(cls):
+        # TODO: Australia, Brazil, London, Portugal, Kiribati
         def _America_Los_Angeles():
             LMT = ZoneOffset("LMT", timedelta(seconds=-28378), ZERO)
             PST = ZoneOffset("PST", timedelta(hours=-8), ZERO)
