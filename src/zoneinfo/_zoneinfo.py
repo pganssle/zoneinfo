@@ -378,6 +378,9 @@ class _ttinfo:
         self.dstoff = dstoff
         self.tzname = tzname
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.utcoff}, {self.dstoff}, {self.tzname})"
+
 
 class _TZStr:
     __slots__ = (
