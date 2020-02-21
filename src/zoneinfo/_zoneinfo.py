@@ -117,7 +117,10 @@ class IANAZone(tzinfo):
         if ts < lt[0]:
             return self._tti_before
         elif ts > lt[-1]:
-            return self._tz_after.get_trans_info(ts, dt.year, dt.fold)
+            if isinstance(self._tz_after, _TZStr):
+                return self._tz_after.get_trans_info(ts, dt.year, dt.fold)
+            else:
+                return self._tz_after
         else:
             # idx is the transition that occurs after this timestamp, so we
             # subtract off 1 to get the current ttinfo
@@ -175,9 +178,9 @@ class IANAZone(tzinfo):
         self._ttinfos = [_ttinfo_list[idx] for idx in trans_idx]
 
         # Find the first non-DST transition
-        for idx in range(len(isdst)):
-            if not isdst[idx]:
-                self._tti_before = self._ttinfos[idx]
+        for i in range(len(isdst)):
+            if not isdst[i]:
+                self._tti_before = _ttinfo_list[i]
                 break
         else:
             if self._ttinfos:
@@ -296,9 +299,11 @@ class IANAZone(tzinfo):
         dst_cnt = sum(isdsts)
         dst_found = 0
 
-        for idx in range(1, len(trans_idx)):
+        for i in range(1, len(trans_idx)):
             if dst_cnt == dst_found:
                 break
+
+            idx = trans_idx[i]
 
             dst = isdsts[idx]
 
@@ -313,13 +318,13 @@ class IANAZone(tzinfo):
             dstoff = 0
             utcoff = utcoffsets[idx]
 
-            comp_idx = idx - 1
+            comp_idx = trans_idx[i - 1]
 
             if not isdsts[comp_idx]:
                 dstoff = utcoff - utcoffsets[comp_idx]
 
             if not dstoff and idx < (typecnt - 1):
-                comp_idx = idx + 1
+                comp_idx = trans_idx[i + 1]
 
                 # If the following transition is also DST and we couldn't
                 # find the DST offset by this point, we're going ot have to
@@ -353,9 +358,16 @@ class IANAZone(tzinfo):
         # Start with the timestamps and modify in-place
         trans_list_wall = [list(trans_list_utc), list(trans_list_utc)]
 
-        offset = utcoffsets[0]
-        trans_list_wall[0][0] += offset
-        trans_list_wall[1][0] += offset
+        if len(utcoffsets) > 1:
+            offset_0 = utcoffsets[0]
+            offset_1 = utcoffsets[trans_idx[0]]
+            if offset_1 > offset_0:
+                offset_1, offset_0 = offset_0, offset_1
+        else:
+            offset_0 = offset_1 = utcoffsets[0]
+
+        trans_list_wall[0][0] += offset_0
+        trans_list_wall[1][0] += offset_1
 
         for i in range(1, len(trans_idx)):
             offset_0 = utcoffsets[trans_idx[i - 1]]

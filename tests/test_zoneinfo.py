@@ -21,7 +21,7 @@ class IANAZoneTest(unittest.TestCase):
         return IANAZone.from_file(f, key=key)
 
     def zones(self):
-        return ["Europe/Dublin"]
+        return ["Europe/Dublin", "America/Los_Angeles"]
 
     def test_unambiguous(self):
         test_cases = []
