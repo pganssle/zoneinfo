@@ -2,13 +2,24 @@ from __future__ import annotations
 
 import base64
 import dataclasses
+import importlib.metadata
 import io
 import lzma
 import struct
+import threading
 import unittest
 from datetime import datetime, time, timedelta, timezone
 
+import zoneinfo
 from zoneinfo import IANAZone
+
+try:
+    importlib.metadata.metadata("tzdata")
+    HAS_TZDATA_PKG = True
+except importlib.metadata.PackageNotFoundError:
+    HAS_TZDATA_PKG = False
+
+TZPATH_LOCK = threading.Lock()
 
 # Useful constants
 ZERO = timedelta(0)
@@ -102,6 +113,40 @@ class IANAZoneTest(unittest.TestCase):
                     self.assertEqual(dt.tzname(), offset.tzname)
                     self.assertEqual(dt.utcoffset(), offset.utcoffset)
                     self.assertEqual(dt.dst(), offset.dst)
+
+
+class TzPathUserMixin:
+    """
+    Adds a setUp() and tearDown() to make TZ_PATHS manipulations thread-safe.
+
+    Any tests that require manipulation of the TZ_PATHS global are necessarily
+    thread unsafe, so we will acquire a lock and reset the TZ_PATHS variable
+    to the default state before each test and release the lock after the test
+    is through.
+    """
+
+    def setUp(self):
+        TZPATH_LOCK.acquire()
+        zoneinfo.set_tz_path()
+
+    def tearDown(self):
+        TZPATH_LOCK.release()
+
+
+@unittest.skipIf(
+    not HAS_TZDATA_PKG, "Skipping tzdata-specific tests: tzdata not installed"
+)
+class TZDataTests(IANAZoneTest, TzPathUserMixin):
+    def setUp(self):
+        super().setUp()
+        self._old_tz_path = tuple(zoneinfo.TZPATHS)
+        zoneinfo.set_tz_path([])
+
+    def tearDown(self):
+        zoneinfo.set_tz_path(self._old_tz_path)
+
+    def zone_from_key(self, key):
+        return IANAZone(key=key)
 
 
 class TZStrTest(unittest.TestCase):

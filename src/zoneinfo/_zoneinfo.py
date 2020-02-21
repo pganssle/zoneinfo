@@ -4,14 +4,8 @@ import importlib.resources
 import os
 import re
 import struct
+import sys
 from datetime import datetime, timedelta, timezone, tzinfo
-
-TZPATHS = [
-    "/usr/share/zoneinfo",
-    "/usr/lib/zoneinfo",
-    "/usr/share/lib/zoneinfo",
-    "/etc/zoneinfo",
-]
 
 EPOCH = datetime(1970, 1, 1)
 EPOCHORDINAL = datetime(1970, 1, 1).toordinal()
@@ -746,3 +740,34 @@ class _TZifHeader:
         args = args + struct.unpack(">6l", stream.read(24))
 
         return cls(*args)
+
+
+TZPATHS = ()
+
+
+def set_tz_path(tz_paths=None):
+    global TZPATHS
+    if tz_paths is not None:
+        if isinstance(tz_paths, (str, bytes)):
+            raise ValueError(
+                f"tz_paths must be a list or tuple, "
+                + f"not {type(tz_paths)}: {tz_paths}"
+            )
+        TZPATHS = tuple(tz_paths)
+    elif "PYTHON_TZPATHS" in os.environ:
+        TZPATHS = tuple(os.environ["PYTHON_TZPATHS"].split(os.pathsep))
+    elif sys.platform != "win32":
+        default_tz_paths = [
+            "/usr/share/zoneinfo",
+            "/usr/lib/zoneinfo",
+            "/usr/share/lib/zoneinfo",
+            "/etc/zoneinfo",
+        ]
+
+        default_tz_paths.sort(key=lambda x: not os.path.exists(x))
+        TZPATHS = tuple(default_tz_paths)
+    else:
+        TZPATHS = ()
+
+
+set_tz_path()
