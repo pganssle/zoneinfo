@@ -26,6 +26,42 @@ def _load_timedelta(seconds):
     return _DELTA_CACHE.setdefault(seconds, timedelta(seconds=seconds))
 
 
+def set_tzpath(tzpaths=None):
+    global TZPATH
+    if tzpaths is not None:
+        if isinstance(tzpaths, (str, bytes)):
+            raise ValueError(
+                f"tzpaths must be a list or tuple, "
+                + f"not {type(tzpaths)}: {tzpaths}"
+            )
+        base_tzpath = tzpaths
+    else:
+        if "PYTHONTZPATH" in os.environ:
+            base_tzpath = os.environ["PYTHONTZPATH"].split(os.pathsep)
+        elif sys.platform != "win32":
+            base_tzpath = [
+                "/usr/share/zoneinfo",
+                "/usr/lib/zoneinfo",
+                "/usr/share/lib/zoneinfo",
+                "/etc/zoneinfo",
+            ]
+
+            base_tzpath.sort(key=lambda x: not os.path.exists(x))
+        else:
+            base_tzpath = []
+
+        if "PYTHONTZPATH_APPEND" in os.environ:
+            base_tzpath.extend(
+                os.environ["PYTHONTZPATH_APPEND"].split(os.pathsep)
+            )
+
+    TZPATH = tuple(base_tzpath)
+
+
+TZPATH = ()
+set_tzpath()
+
+
 class ZoneInfo(tzinfo):
     __strong_cache_size = 8
     __strong_cache = collections.OrderedDict()
@@ -404,6 +440,39 @@ class ZoneInfo(tzinfo):
         return trans_list_wall
 
 
+class _TZifHeader:
+    __slots__ = [
+        "version",
+        "isutcnt",
+        "isstdcnt",
+        "leapcnt",
+        "timecnt",
+        "typecnt",
+        "charcnt",
+    ]
+
+    def __init__(self, *args):
+        assert len(self.__slots__) == len(args)
+        for attr, val in zip(self.__slots__, args):
+            setattr(self, attr, val)
+
+    @classmethod
+    def from_file(cls, stream):
+        # The header starts with a 4-byte "magic" value
+        if stream.read(4) != b"TZif":
+            raise ValueError("Invalid TZif file: magic not found")
+
+        version = int(stream.read(1))
+        stream.read(15)
+
+        args = (version,)
+
+        # Slots are defined in the order that the bytes are arranged
+        args = args + struct.unpack(">6l", stream.read(24))
+
+        return cls(*args)
+
+
 class _ttinfo:
     __slots__ = ["utcoff", "dstoff", "tzname"]
 
@@ -504,67 +573,6 @@ class _TZStr:
         fold = ambig_start <= ts < ambig_start + self.dst_diff
 
         return (self.dst if isdst else self.std, fold)
-
-
-def _parse_tz_str(tz_str):
-    # The tz string has the format:
-    #
-    # std[offset[dst[offset],start[/time],end[/time]]]
-    #
-    # std and dst must be 3 or more characters long and must not contain
-    # a leading colon, embedded digits, commas, nor a plus or minus signs;
-    # The spaces between "std" and "offset" are only for display and are
-    # not actually present in the string.
-    #
-    # The format of the offset is ``[+|-]hh[:mm[:ss]]``
-
-    offset_str, *start_end_str = tz_str.split(",", 1)
-
-    # fmt: off
-    parser_re = re.compile(
-        r"(?P<std>[^0-9:.+-]+)" +
-        r"((?P<stdoff>[+-]?\d{1,2}(:\d{2}(:\d{2})?)?)" +
-            r"((?P<dst>[^0-9:.+-]+)" +
-                r"((?P<dstoff>[+-]?\d{1,2}(:\d{2}(:\d{2})?)?))?" +
-            r")?" + # dst
-        r")?$" # stdoff
-    )
-    # fmt: on
-
-    m = parser_re.match(offset_str)
-
-    if m is None:
-        raise ValueError(f"{tz_str} is not a valid TZ string")
-
-    std_abbr = m.group("std")
-    dst_abbr = m.group("dst")
-    dst_offset = None
-
-    if std_offset := m.group("stdoff"):
-        std_offset = _parse_tz_delta(std_offset)
-    else:
-        std_offset = 0
-
-    if dst_abbr is not None:
-        if dst_offset := m.group("dstoff"):
-            dst_offset = _parse_tz_delta(dst_offset)
-        else:
-            dst_offset = std_offset + 3600
-
-        if not start_end_str:
-            raise ValueError("Missing transition rules")
-
-        start_end_strs = start_end_str[0].split(",", 1)
-        start, end = (_parse_dst_start_end(x) for x in start_end_strs)
-
-        return _TZStr(std_abbr, std_offset, dst_abbr, dst_offset, start, end)
-    elif start_end_str:
-        raise ValueError("Transition rule present without DST")
-    else:
-        # This is a static ttinfo, don't return _TZStr
-        return _ttinfo(
-            _load_timedelta(std_offset), _load_timedelta(0), std_abbr
-        )
 
 
 def _post_epoch_days_before_year(year):
@@ -687,6 +695,67 @@ class _calendar_offset:
         return epoch
 
 
+def _parse_tz_str(tz_str):
+    # The tz string has the format:
+    #
+    # std[offset[dst[offset],start[/time],end[/time]]]
+    #
+    # std and dst must be 3 or more characters long and must not contain
+    # a leading colon, embedded digits, commas, nor a plus or minus signs;
+    # The spaces between "std" and "offset" are only for display and are
+    # not actually present in the string.
+    #
+    # The format of the offset is ``[+|-]hh[:mm[:ss]]``
+
+    offset_str, *start_end_str = tz_str.split(",", 1)
+
+    # fmt: off
+    parser_re = re.compile(
+        r"(?P<std>[^0-9:.+-]+)" +
+        r"((?P<stdoff>[+-]?\d{1,2}(:\d{2}(:\d{2})?)?)" +
+            r"((?P<dst>[^0-9:.+-]+)" +
+                r"((?P<dstoff>[+-]?\d{1,2}(:\d{2}(:\d{2})?)?))?" +
+            r")?" + # dst
+        r")?$" # stdoff
+    )
+    # fmt: on
+
+    m = parser_re.match(offset_str)
+
+    if m is None:
+        raise ValueError(f"{tz_str} is not a valid TZ string")
+
+    std_abbr = m.group("std")
+    dst_abbr = m.group("dst")
+    dst_offset = None
+
+    if std_offset := m.group("stdoff"):
+        std_offset = _parse_tz_delta(std_offset)
+    else:
+        std_offset = 0
+
+    if dst_abbr is not None:
+        if dst_offset := m.group("dstoff"):
+            dst_offset = _parse_tz_delta(dst_offset)
+        else:
+            dst_offset = std_offset + 3600
+
+        if not start_end_str:
+            raise ValueError("Missing transition rules")
+
+        start_end_strs = start_end_str[0].split(",", 1)
+        start, end = (_parse_dst_start_end(x) for x in start_end_strs)
+
+        return _TZStr(std_abbr, std_offset, dst_abbr, dst_offset, start, end)
+    elif start_end_str:
+        raise ValueError("Transition rule present without DST")
+    else:
+        # This is a static ttinfo, don't return _TZStr
+        return _ttinfo(
+            _load_timedelta(std_offset), _load_timedelta(0), std_abbr
+        )
+
+
 def _parse_dst_start_end(dststr):
     date, *time = dststr.split("/")
     if date[0] == "M":
@@ -735,74 +804,3 @@ def _parse_tz_delta(tz_delta):
         total *= -1
 
     return total
-
-
-class _TZifHeader:
-    __slots__ = [
-        "version",
-        "isutcnt",
-        "isstdcnt",
-        "leapcnt",
-        "timecnt",
-        "typecnt",
-        "charcnt",
-    ]
-
-    def __init__(self, *args):
-        assert len(self.__slots__) == len(args)
-        for attr, val in zip(self.__slots__, args):
-            setattr(self, attr, val)
-
-    @classmethod
-    def from_file(cls, stream):
-        # The header starts with a 4-byte "magic" value
-        if stream.read(4) != b"TZif":
-            raise ValueError("Invalid TZif file: magic not found")
-
-        version = int(stream.read(1))
-        stream.read(15)
-
-        args = (version,)
-
-        # Slots are defined in the order that the bytes are arranged
-        args = args + struct.unpack(">6l", stream.read(24))
-
-        return cls(*args)
-
-
-TZPATH = ()
-
-
-def set_tzpath(tzpaths=None):
-    global TZPATH
-    if tzpaths is not None:
-        if isinstance(tzpaths, (str, bytes)):
-            raise ValueError(
-                f"tzpaths must be a list or tuple, "
-                + f"not {type(tzpaths)}: {tzpaths}"
-            )
-        base_tzpath = tzpaths
-    else:
-        if "PYTHONTZPATH" in os.environ:
-            base_tzpath = os.environ["PYTHONTZPATH"].split(os.pathsep)
-        elif sys.platform != "win32":
-            base_tzpath = [
-                "/usr/share/zoneinfo",
-                "/usr/lib/zoneinfo",
-                "/usr/share/lib/zoneinfo",
-                "/etc/zoneinfo",
-            ]
-
-            base_tzpath.sort(key=lambda x: not os.path.exists(x))
-        else:
-            base_tzpath = []
-
-        if "PYTHONTZPATH_APPEND" in os.environ:
-            base_tzpath.extend(
-                os.environ["PYTHONTZPATH_APPEND"].split(os.pathsep)
-            )
-
-    TZPATH = tuple(base_tzpath)
-
-
-set_tzpath()
