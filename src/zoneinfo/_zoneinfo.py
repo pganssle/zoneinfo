@@ -1,10 +1,12 @@
 import bisect
 import calendar
+import collections
 import importlib.resources
 import os
 import re
 import struct
 import sys
+import weakref
 from datetime import datetime, timedelta, timezone, tzinfo
 
 EPOCH = datetime(1970, 1, 1)
@@ -25,24 +27,50 @@ def _load_timedelta(seconds):
 
 
 class ZoneInfo(tzinfo):
-    def __init__(self, key):
-        self._key = key
-        self._file_path = self._find_tzfile(key)
+    __strong_cache_size = 8
+    __strong_cache = collections.OrderedDict()
+    __weak_cache = weakref.WeakValueDictionary()
 
-        if self._file_path is not None:
-            with open(self._file_path, "rb") as f:
-                self._load_file(f)
+    def __new__(cls, key):
+        instance = cls.__weak_cache.get(key, None)
+        if instance is None:
+            instance = cls.__weak_cache.setdefault(key, cls.nocache(key))
+
+        # Update the "strong" cache
+        cls.__strong_cache[key] = cls.__strong_cache.pop(key, instance)
+
+        if len(cls.__strong_cache) > cls.__strong_cache_size:
+            cls.__strong_cache.popitem(last=False)
+
+        return instance
+
+    @classmethod
+    def nocache(cls, key):
+        obj = super().__new__(cls)
+        obj._key = key
+        obj._file_path = obj._find_tzfile(key)
+
+        if obj._file_path is not None:
+            with open(obj._file_path, "rb") as f:
+                obj._load_file(f)
         else:
-            self._load_tzdata(key)
+            obj._load_tzdata(key)
+
+        return obj
 
     @classmethod
     def from_file(cls, fobj, key=None):
-        obj = cls.__new__(cls)
+        obj = super().__new__(cls)
         obj._key = key
         obj._file_path = None
         obj._load_file(fobj)
 
         return obj
+
+    @classmethod
+    def clear_cache(cls):
+        cls.__weak_cache.clear()
+        cls.__strong_cache.clear()
 
     def _load_tzdata(self, key):
         # TODO: Proper error for malformed keys?

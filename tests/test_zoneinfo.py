@@ -341,6 +341,32 @@ class TZStrTest(unittest.TestCase):
                     self.assertEqual(dt.utcoffset(), expected_tzoffset)
 
 
+class ZoneInfoCacheTest(unittest.TestCase):
+    def setUp(self):
+        ZoneInfo.clear_cache()
+
+    def test_ephemeral_zones(self):
+        self.assertIs(
+            ZoneInfo("America/New_York"), ZoneInfo("America/New_York")
+        )
+
+    def test_strong_refs(self):
+        tz0 = ZoneInfo("Australia/Hobart")
+        tz1 = ZoneInfo("Australia/Hobart")
+
+        self.assertIs(tz0, tz1)
+
+    def test_nocache(self):
+        # TODO: Add a test that actually hits Kosrae
+        # tz0 = ZoneInfo("Pacific/Kosrae")
+        # tz1 = ZoneInfo.nocache("Pacific/Kosrae")
+
+        tz0 = ZoneInfo("Europe/Monaco")
+        tz1 = ZoneInfo.nocache("Europe/Monaco")
+
+        self.assertIsNot(tz0, tz1)
+
+
 @dataclasses.dataclass
 class ZoneOffset:
     tzname: str
