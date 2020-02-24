@@ -581,7 +581,7 @@ def _post_epoch_days_before_year(year):
     return y * 365 + y // 4 - y // 100 + y // 400 - EPOCHORDINAL
 
 
-class _day_offset:
+class _DayOffset:
     __slots__ = ["d", "julian", "hour", "minute", "second"]
 
     def __init__(self, d, julian, hour=2, minute=0, second=0):
@@ -615,7 +615,7 @@ class _day_offset:
         return epoch
 
 
-class _calendar_offset:
+class _CalendarOffset:
     __slots__ = ["m", "w", "d", "hour", "minute", "second"]
 
     _DAYS_BEFORE_MONTH = (
@@ -764,7 +764,7 @@ def _parse_dst_start_end(dststr):
         if m is None:
             raise ValueError(f"Invalid dst start/end date: {dststr}")
         date_offset = tuple(map(int, m.groups()))
-        offset = _calendar_offset(*date_offset)
+        offset = _CalendarOffset(*date_offset)
     else:
         if date[0] == "J":
             n_is_julian = True
@@ -773,7 +773,7 @@ def _parse_dst_start_end(dststr):
             n_is_julian = False
 
         doy = int(date)
-        offset = _date_offset(doy, n_is_julian)
+        offset = _DayOffset(doy, n_is_julian)
 
     if time:
         time_components = list(map(int, time[0].split(":")))
