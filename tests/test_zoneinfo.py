@@ -11,7 +11,7 @@ import unittest
 from datetime import datetime, time, timedelta, timezone
 
 import zoneinfo
-from zoneinfo import IANAZone
+from zoneinfo import ZoneInfo
 
 try:
     importlib.metadata.metadata("tzdata")
@@ -26,10 +26,10 @@ ZERO = timedelta(0)
 ONE_H = timedelta(hours=1)
 
 
-class IANAZoneTest(unittest.TestCase):
+class ZoneInfoTest(unittest.TestCase):
     def zone_from_key(self, key):
         f = ZoneDumpData.load_zoneinfo_file(key)
-        return IANAZone.from_file(f, key=key)
+        return ZoneInfo.from_file(f, key=key)
 
     def zones(self):
         return ["Europe/Dublin", "America/Los_Angeles"]
@@ -136,9 +136,9 @@ class TzPathUserMixin:
 @unittest.skipIf(
     not HAS_TZDATA_PKG, "Skipping tzdata-specific tests: tzdata not installed"
 )
-class TZDataTests(IANAZoneTest, TzPathUserMixin):
+class TZDataTests(ZoneInfoTest, TzPathUserMixin):
     """
-    Runs all the IANAZoneTest tests, but against the tzdata package
+    Runs all the ZoneInfoTest tests, but against the tzdata package
 
     NOTE: The ZoneDumpData has frozen test data, but tzdata will update, so
     some of the tests (particularly those related to the far future) may break
@@ -154,7 +154,7 @@ class TZDataTests(IANAZoneTest, TzPathUserMixin):
         zoneinfo.set_tz_path(self._old_tz_path)
 
     def zone_from_key(self, key):
-        return IANAZone(key=key)
+        return ZoneInfo(key=key)
 
 
 class TZStrTest(unittest.TestCase):
@@ -187,7 +187,7 @@ class TZStrTest(unittest.TestCase):
 
         zonefile.seek(0)
 
-        return IANAZone.from_file(zonefile, key=tzstr)
+        return ZoneInfo.from_file(zonefile, key=tzstr)
 
     def test_m_spec_fromutc(self):
         UTC = timezone.utc

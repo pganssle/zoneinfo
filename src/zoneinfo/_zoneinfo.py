@@ -24,7 +24,7 @@ def _load_timedelta(seconds):
     return _DELTA_CACHE.setdefault(seconds, timedelta(seconds=seconds))
 
 
-class IANAZone(tzinfo):
+class ZoneInfo(tzinfo):
     def __init__(self, key):
         self._key = key
         self._file_path = self._find_tzfile(key)
