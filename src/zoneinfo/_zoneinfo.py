@@ -140,7 +140,7 @@ class ZoneInfo(tzinfo):
         return f"{self.__class__.__name__}(file_path={self._file_path!r}, key={self._key!r})"
 
     def _find_tzfile(self, key):
-        for search_path in TZPATHS:
+        for search_path in TZPATH:
             filepath = os.path.join(search_path, key)
             if os.path.isfile(filepath):
                 return filepath
@@ -742,32 +742,39 @@ class _TZifHeader:
         return cls(*args)
 
 
-TZPATHS = ()
+TZPATH = ()
 
 
-def set_tz_path(tz_paths=None):
-    global TZPATHS
-    if tz_paths is not None:
-        if isinstance(tz_paths, (str, bytes)):
+def set_tzpath(tzpaths=None):
+    global TZPATH
+    if tzpaths is not None:
+        if isinstance(tzpaths, (str, bytes)):
             raise ValueError(
-                f"tz_paths must be a list or tuple, "
-                + f"not {type(tz_paths)}: {tz_paths}"
+                f"tzpaths must be a list or tuple, "
+                + f"not {type(tzpaths)}: {tzpaths}"
             )
-        TZPATHS = tuple(tz_paths)
-    elif "PYTHON_TZPATHS" in os.environ:
-        TZPATHS = tuple(os.environ["PYTHON_TZPATHS"].split(os.pathsep))
-    elif sys.platform != "win32":
-        default_tz_paths = [
-            "/usr/share/zoneinfo",
-            "/usr/lib/zoneinfo",
-            "/usr/share/lib/zoneinfo",
-            "/etc/zoneinfo",
-        ]
-
-        default_tz_paths.sort(key=lambda x: not os.path.exists(x))
-        TZPATHS = tuple(default_tz_paths)
+        base_tzpath = tzpaths
     else:
-        TZPATHS = ()
+        if "PYTHONTZPATH" in os.environ:
+            base_tzpath = os.environ["PYTHONTZPATH"].split(os.pathsep)
+        elif sys.platform != "win32":
+            base_tzpath = [
+                "/usr/share/zoneinfo",
+                "/usr/lib/zoneinfo",
+                "/usr/share/lib/zoneinfo",
+                "/etc/zoneinfo",
+            ]
+
+            base_tzpath.sort(key=lambda x: not os.path.exists(x))
+        else:
+            base_tzpath = []
+
+        if "PYTHONTZPATH_APPEND" in os.environ:
+            base_tzpath.extend(
+                os.environ["PYTHONTZPATH_APPEND"].split(os.pathsep)
+            )
+
+    TZPATH = tuple(base_tzpath)
 
 
-set_tz_path()
+set_tzpath()

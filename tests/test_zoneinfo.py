@@ -127,7 +127,7 @@ class TzPathUserMixin:
 
     def setUp(self):
         TZPATH_LOCK.acquire()
-        zoneinfo.set_tz_path()
+        zoneinfo.set_tzpath()
 
     def tearDown(self):
         TZPATH_LOCK.release()
@@ -147,11 +147,11 @@ class TZDataTests(ZoneInfoTest, TzPathUserMixin):
 
     def setUp(self):
         super().setUp()
-        self._old_tz_path = tuple(zoneinfo.TZPATHS)
-        zoneinfo.set_tz_path([])
+        self._old_tz_path = tuple(zoneinfo.TZPATH)
+        zoneinfo.set_tzpath([])
 
     def tearDown(self):
-        zoneinfo.set_tz_path(self._old_tz_path)
+        zoneinfo.set_tzpath(self._old_tz_path)
 
     def zone_from_key(self, key):
         return ZoneInfo(key=key)
