@@ -328,6 +328,10 @@ class TZStrTest(unittest.TestCase):
                     # fmt: on
                 ],
             ),
+            (
+                "<+11>-11",  # Pacific/Kosrae
+                [(datetime(2020, 1, 1), "+11", timedelta(hours=11)),],
+            ),
         ]
 
         for tzstr, test_values in test_cases:
@@ -357,9 +361,6 @@ class ZoneInfoCacheTest(unittest.TestCase):
         self.assertIs(tz0, tz1)
 
     def test_nocache(self):
-        # TODO: Add a test that actually hits Kosrae
-        # tz0 = ZoneInfo("Pacific/Kosrae")
-        # tz1 = ZoneInfo.nocache("Pacific/Kosrae")
 
         tz0 = ZoneInfo("Europe/Monaco")
         tz1 = ZoneInfo.nocache("Europe/Monaco")

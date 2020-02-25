@@ -711,9 +711,9 @@ def _parse_tz_str(tz_str):
 
     # fmt: off
     parser_re = re.compile(
-        r"(?P<std>[^0-9:.+-]+)" +
+        r"(?P<std>[^<0-9:.+-]+|<[a-zA-Z0-9+\-]+>)" +
         r"((?P<stdoff>[+-]?\d{1,2}(:\d{2}(:\d{2})?)?)" +
-            r"((?P<dst>[^0-9:.+-]+)" +
+            r"((?P<dst>[^0-9:.+-]+|<[a-zA-Z0-9+\-]>)" +
                 r"((?P<dstoff>[+-]?\d{1,2}(:\d{2}(:\d{2})?)?))?" +
             r")?" + # dst
         r")?$" # stdoff
@@ -728,6 +728,12 @@ def _parse_tz_str(tz_str):
     std_abbr = m.group("std")
     dst_abbr = m.group("dst")
     dst_offset = None
+
+    if std_abbr:
+        std_abbr = std_abbr.strip("<>")
+
+    if dst_abbr:
+        dst_abbr = dst_abbr.strip("<>")
 
     if std_offset := m.group("stdoff"):
         std_offset = _parse_tz_delta(std_offset)
