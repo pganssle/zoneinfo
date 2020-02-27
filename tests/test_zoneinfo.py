@@ -561,11 +561,26 @@ class ZoneDumpData:
                 ZoneTransition(datetime(1996, 10, 27, 2), WEST, WET),
             ]
 
+        def _Pacific_Kiritimati():
+            LMT = ZoneOffset("LMT", timedelta(seconds=-37760), ZERO)
+            N1040 = ZoneOffset("-1040", timedelta(seconds=-38400), ZERO)
+            N10 = ZoneOffset("-10", timedelta(seconds=-36000), ZERO)
+            P14 = ZoneOffset("+14", timedelta(seconds=50400), ZERO)
+
+            # This is literally every transition in Christmas Island history
+            return [
+                ZoneTransition(datetime(1901, 1, 1), LMT, N1040),
+                ZoneTransition(datetime(1979, 10, 1), N1040, N10),
+                # They skipped December 31, 1994
+                ZoneTransition(datetime(1994, 12, 31), N10, P14),
+            ]
+
         cls._ZONEDUMP_DATA = {
             "America/Los_Angeles": _America_Los_Angeles(),
             "Australia/Sydney": _Australia_Sydney(),
             "Europe/Dublin": _Europe_Dublin(),
             "Europe/Lisbon": _Europe_Lisbon(),
+            "Pacific/Kiritimati": _Pacific_Kiritimati(),
         }
 
     _ZONEDUMP_DATA = {}
