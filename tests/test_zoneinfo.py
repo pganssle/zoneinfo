@@ -546,10 +546,26 @@ class ZoneDumpData:
                 ZoneTransition(datetime(2487, 10, 26, 2), IST_1, GMT_1),
             ]
 
+        def _Europe_Lisbon():
+            WET = ZoneOffset("WET", ZERO, ZERO)
+            WEST = ZoneOffset("WEST", ONE_H, ONE_H)
+            CET = ZoneOffset("CET", ONE_H, ZERO)
+            CEST = ZoneOffset("CEST", timedelta(seconds=7200), ONE_H)
+
+            return [
+                ZoneTransition(datetime(1992, 3, 29, 1), WET, WEST),
+                ZoneTransition(datetime(1992, 9, 27, 2), WEST, CET),
+                ZoneTransition(datetime(1993, 3, 28, 2), CET, CEST),
+                ZoneTransition(datetime(1993, 9, 26, 3), CEST, CET),
+                ZoneTransition(datetime(1996, 3, 31, 2), CET, WEST),
+                ZoneTransition(datetime(1996, 10, 27, 2), WEST, WET),
+            ]
+
         cls._ZONEDUMP_DATA = {
             "America/Los_Angeles": _America_Los_Angeles(),
             "Australia/Sydney": _Australia_Sydney(),
             "Europe/Dublin": _Europe_Dublin(),
+            "Europe/Lisbon": _Europe_Lisbon(),
         }
 
     _ZONEDUMP_DATA = {}
