@@ -332,6 +332,13 @@ class TZStrTest(unittest.TestCase):
                 "<+11>-11",  # Pacific/Kosrae
                 [(datetime(2020, 1, 1), "+11", timedelta(hours=11)),],
             ),
+            (
+                "<-04>4<-03>,M9.1.6/24,M4.1.6/24",
+                [
+                    (datetime(2020, 5, 1), "-04", timedelta(hours=-4)),
+                    (datetime(2020, 11, 1), "-03", timedelta(hours=-3)),
+                ],
+            ),
         ]
 
         for tzstr, test_values in test_cases:
