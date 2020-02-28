@@ -53,7 +53,7 @@ class ZoneInfoTest(unittest.TestCase):
             return ZoneInfo.from_file(f, key=key)
 
     def zones(self):
-        return ["Europe/Dublin", "America/Los_Angeles"]
+        return ZoneDumpData.transition_keys()
 
     def test_unambiguous(self):
         test_cases = []
