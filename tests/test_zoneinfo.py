@@ -376,22 +376,30 @@ class TZStrTest(unittest.TestCase):
 class ZoneInfoCacheTest(unittest.TestCase):
     def setUp(self):
         ZoneInfo.clear_cache()
+        zoneinfo.set_tzpath(self.tzpath)
+
+    def tearDown(self):
+        zoneinfo.set_tzpath()
+
+    @property
+    def tzpath(self):
+        return [TEMP_DIR]
 
     def test_ephemeral_zones(self):
         self.assertIs(
-            ZoneInfo("America/New_York"), ZoneInfo("America/New_York")
+            ZoneInfo("America/Los_Angeles"), ZoneInfo("America/Los_Angeles")
         )
 
     def test_strong_refs(self):
-        tz0 = ZoneInfo("Australia/Hobart")
-        tz1 = ZoneInfo("Australia/Hobart")
+        tz0 = ZoneInfo("Australia/Sydney")
+        tz1 = ZoneInfo("Australia/Sydney")
 
         self.assertIs(tz0, tz1)
 
     def test_nocache(self):
 
-        tz0 = ZoneInfo("Europe/Monaco")
-        tz1 = ZoneInfo.nocache("Europe/Monaco")
+        tz0 = ZoneInfo("Europe/Lisbon")
+        tz1 = ZoneInfo.nocache("Europe/Lisbon")
 
         self.assertIsNot(tz0, tz1)
 
