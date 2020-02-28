@@ -487,6 +487,24 @@ class ZoneDumpData:
     @classmethod
     def _populate_zonedump_data(cls):
         # TODO: Australia, Brazil, London, Portugal, Kiribati
+        def _Africa_Casablanca():
+            P00_s = ZoneOffset("+00", ZERO, ZERO)
+            P01_d = ZoneOffset("+01", ONE_H, ONE_H)
+            P00_d = ZoneOffset("+00", ZERO, -ONE_H)
+            P01_s = ZoneOffset("+01", ONE_H, ZERO)
+
+            return [
+                # Morocco sometimes pauses DST during Ramadan
+                ZoneTransition(datetime(2018, 3, 25, 2), P00_s, P01_d),
+                ZoneTransition(datetime(2018, 5, 13, 3), P01_d, P00_s),
+                ZoneTransition(datetime(2018, 6, 17, 2), P00_s, P01_d),
+                # On October 28th Morocco set standard time to +01,
+                # with negative DST only during Ramadan
+                ZoneTransition(datetime(2018, 10, 28, 3), P01_d, P01_s),
+                ZoneTransition(datetime(2019, 5, 5, 3), P01_s, P00_d),
+                ZoneTransition(datetime(2019, 6, 9, 2), P00_d, P01_s),
+            ]
+
         def _America_Los_Angeles():
             LMT = ZoneOffset("LMT", timedelta(seconds=-28378), ZERO)
             PST = ZoneOffset("PST", timedelta(hours=-8), ZERO)
@@ -576,6 +594,7 @@ class ZoneDumpData:
             ]
 
         cls._ZONEDUMP_DATA = {
+            "Africa/Casablanca": _Africa_Casablanca(),
             "America/Los_Angeles": _America_Los_Angeles(),
             "Australia/Sydney": _Australia_Sydney(),
             "Europe/Dublin": _Europe_Dublin(),
