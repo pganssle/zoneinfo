@@ -4,8 +4,12 @@ import base64
 import dataclasses
 import importlib.metadata
 import io
+import json
 import lzma
+import pathlib
+import shutil
 import struct
+import tempfile
 import threading
 import unittest
 from datetime import datetime, time, timedelta, timezone
@@ -21,18 +25,35 @@ except importlib.metadata.PackageNotFoundError:
 
 TZPATH_LOCK = threading.Lock()
 
+ZONEINFO_DATA = None
+TEMP_DIR = None
+DATA_DIR = pathlib.Path(__file__).parent / "data"
+ZONEINFO_JSON = DATA_DIR / "zoneinfo_data.json"
+
 # Useful constants
 ZERO = timedelta(0)
 ONE_H = timedelta(hours=1)
 
 
+def setUpModule():
+    global TEMP_DIR
+    global ZONEINFO_DATA
+
+    TEMP_DIR = pathlib.Path(tempfile.mkdtemp(prefix="zoneinfo"))
+    ZONEINFO_DATA = ZoneInfoData(ZONEINFO_JSON, TEMP_DIR)
+
+
+def tearDownModule():
+    shutil.rmtree(TEMP_DIR)
+
+
 class ZoneInfoTest(unittest.TestCase):
     def zone_from_key(self, key):
-        f = ZoneDumpData.load_zoneinfo_file(key)
-        return ZoneInfo.from_file(f, key=key)
+        with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
+            return ZoneInfo.from_file(f, key=key)
 
     def zones(self):
-        return ["Europe/Dublin", "America/Los_Angeles"]
+        return ZoneDumpData.transition_keys()
 
     def test_unambiguous(self):
         test_cases = []
@@ -59,9 +80,9 @@ class ZoneInfoTest(unittest.TestCase):
                 tzi = self.zone_from_key(key)
                 dt = dt.replace(tzinfo=tzi)
 
-                self.assertEqual(dt.tzname(), offset.tzname)
-                self.assertEqual(dt.utcoffset(), offset.utcoffset)
-                self.assertEqual(dt.dst(), offset.dst)
+                self.assertEqual(dt.tzname(), offset.tzname, dt)
+                self.assertEqual(dt.utcoffset(), offset.utcoffset, dt)
+                self.assertEqual(dt.dst(), offset.dst, dt)
 
     def test_folds_and_gaps(self):
         test_cases = []
@@ -110,9 +131,9 @@ class ZoneInfoTest(unittest.TestCase):
                 for dt, fold, offset in tests:
                     dt = dt.replace(fold=fold, tzinfo=tzi)
 
-                    self.assertEqual(dt.tzname(), offset.tzname)
-                    self.assertEqual(dt.utcoffset(), offset.utcoffset)
-                    self.assertEqual(dt.dst(), offset.dst)
+                    self.assertEqual(dt.tzname(), offset.tzname, dt)
+                    self.assertEqual(dt.utcoffset(), offset.utcoffset, dt)
+                    self.assertEqual(dt.dst(), offset.dst, dt)
 
 
 class TzPathUserMixin:
@@ -355,22 +376,30 @@ class TZStrTest(unittest.TestCase):
 class ZoneInfoCacheTest(unittest.TestCase):
     def setUp(self):
         ZoneInfo.clear_cache()
+        zoneinfo.set_tzpath(self.tzpath)
+
+    def tearDown(self):
+        zoneinfo.set_tzpath()
+
+    @property
+    def tzpath(self):
+        return [TEMP_DIR]
 
     def test_ephemeral_zones(self):
         self.assertIs(
-            ZoneInfo("America/New_York"), ZoneInfo("America/New_York")
+            ZoneInfo("America/Los_Angeles"), ZoneInfo("America/Los_Angeles")
         )
 
     def test_strong_refs(self):
-        tz0 = ZoneInfo("Australia/Hobart")
-        tz1 = ZoneInfo("Australia/Hobart")
+        tz0 = ZoneInfo("Australia/Sydney")
+        tz1 = ZoneInfo("Australia/Sydney")
 
         self.assertIs(tz0, tz1)
 
     def test_nocache(self):
 
-        tz0 = ZoneInfo("Europe/Monaco")
-        tz1 = ZoneInfo.nocache("Europe/Monaco")
+        tz0 = ZoneInfo("Europe/Lisbon")
+        tz1 = ZoneInfo.nocache("Europe/Lisbon")
 
         self.assertIsNot(tz0, tz1)
 
@@ -417,7 +446,32 @@ class ZoneTransition:
             return self.transition
 
 
-BREAK_ONCE = 0
+class ZoneInfoData:
+    def __init__(self, source_json, tzpath):
+        self.tzpath = pathlib.Path(tzpath)
+        self.keys = []
+        self._populate_tzpath(source_json)
+
+    def path_from_key(self, key):
+        return self.tzpath / key
+
+    def _populate_tzpath(self, source_json):
+        with open(source_json, "rb") as f:
+            zoneinfo_dict = json.load(f)
+
+        for key, value in zoneinfo_dict.items():
+            self.keys.append(key)
+            raw_data = self._decode_text(value)
+            destination = self.path_from_key(key)
+            destination.parent.mkdir(exist_ok=True, parents=True)
+            with open(destination, "wb") as f:
+                f.write(raw_data)
+
+    def _decode_text(self, contents):
+        raw_data = b"".join(map(str.encode, contents))
+        decoded = base64.b85decode(raw_data)
+
+        return lzma.decompress(decoded)
 
 
 class ZoneDumpData:
@@ -428,18 +482,6 @@ class ZoneDumpData:
     @classmethod
     def load_transition_examples(cls, key):
         return cls._get_zonedump()[key]
-
-    @classmethod
-    def load_zoneinfo_file(cls, key):
-        if key not in cls.ZONEFILES:
-            raise ValueError(f"Zoneinfo file not found: {key}")
-
-        raw = cls.ZONEFILES[key]
-        raw = b"".join(map(bytes.strip, raw.split(b"\n")))
-        decoded = base64.b85decode(raw)
-        decompressed = lzma.decompress(decoded)
-
-        return io.BytesIO(decompressed)
 
     # These are examples of a bunch of transitions that can be used in tests
     # The format for each transition is:
@@ -452,7 +494,24 @@ class ZoneDumpData:
 
     @classmethod
     def _populate_zonedump_data(cls):
-        # TODO: Australia, Brazil, London, Portugal, Kiribati
+        def _Africa_Casablanca():
+            P00_s = ZoneOffset("+00", ZERO, ZERO)
+            P01_d = ZoneOffset("+01", ONE_H, ONE_H)
+            P00_d = ZoneOffset("+00", ZERO, -ONE_H)
+            P01_s = ZoneOffset("+01", ONE_H, ZERO)
+
+            return [
+                # Morocco sometimes pauses DST during Ramadan
+                ZoneTransition(datetime(2018, 3, 25, 2), P00_s, P01_d),
+                ZoneTransition(datetime(2018, 5, 13, 3), P01_d, P00_s),
+                ZoneTransition(datetime(2018, 6, 17, 2), P00_s, P01_d),
+                # On October 28th Morocco set standard time to +01,
+                # with negative DST only during Ramadan
+                ZoneTransition(datetime(2018, 10, 28, 3), P01_d, P01_s),
+                ZoneTransition(datetime(2019, 5, 5, 3), P01_s, P00_d),
+                ZoneTransition(datetime(2019, 6, 9, 2), P00_d, P01_s),
+            ]
+
         def _America_Los_Angeles():
             LMT = ZoneOffset("LMT", timedelta(seconds=-28378), ZERO)
             PST = ZoneOffset("PST", timedelta(hours=-8), ZERO)
@@ -477,6 +536,51 @@ class ZoneDumpData:
                 ZoneTransition(datetime(2450, 11, 6, 2), PDT, PST),
             ]
 
+        def _America_Santiago():
+            LMT = ZoneOffset("LMT", timedelta(seconds=-16966), ZERO)
+            SMT = ZoneOffset("SMT", timedelta(seconds=-16966), ZERO)
+            N05 = ZoneOffset("-05", timedelta(seconds=-18000), ZERO)
+            N04 = ZoneOffset("-04", timedelta(seconds=-14400), ZERO)
+            N03 = ZoneOffset("-03", timedelta(seconds=-10800), ONE_H)
+
+            return [
+                ZoneTransition(datetime(1890, 1, 1), LMT, SMT),
+                ZoneTransition(datetime(1910, 1, 10), SMT, N05),
+                ZoneTransition(datetime(1916, 7, 1), N05, SMT),
+                ZoneTransition(datetime(2008, 3, 30), N03, N04),
+                ZoneTransition(datetime(2008, 10, 12), N04, N03),
+                ZoneTransition(datetime(2040, 4, 8), N03, N04),
+                ZoneTransition(datetime(2040, 9, 2), N04, N03),
+            ]
+
+        def _Asia_Tokyo():
+            JST = ZoneOffset("JST", timedelta(seconds=32400), ZERO)
+            JDT = ZoneOffset("JDT", timedelta(seconds=36000), ONE_H)
+
+            # Japan had DST from 1948 to 1951, and it was unusual in that
+            # the transition from DST to STD occurred at 25:00, and is
+            # denominated as such in the time zone database
+            return [
+                ZoneTransition(datetime(1948, 5, 2), JST, JDT),
+                ZoneTransition(datetime(1948, 9, 12, 1), JDT, JST),
+                ZoneTransition(datetime(1951, 9, 9, 1), JDT, JST),
+            ]
+
+        def _Australia_Sydney():
+            LMT = ZoneOffset("LMT", timedelta(seconds=36292), ZERO)
+            AEST = ZoneOffset("AEST", timedelta(seconds=36000), ZERO)
+            AEDT = ZoneOffset("AEDT", timedelta(seconds=39600), ONE_H)
+
+            return [
+                ZoneTransition(datetime(1895, 2, 1), LMT, AEST),
+                ZoneTransition(datetime(1917, 1, 1, 0, 1), AEST, AEDT),
+                ZoneTransition(datetime(1917, 3, 25, 2), AEDT, AEST),
+                ZoneTransition(datetime(2012, 4, 1, 3), AEDT, AEST),
+                ZoneTransition(datetime(2012, 10, 7, 2), AEST, AEDT),
+                ZoneTransition(datetime(2040, 4, 1, 3), AEDT, AEST),
+                ZoneTransition(datetime(2040, 10, 7, 2), AEST, AEDT),
+            ]
+
         def _Europe_Dublin():
             LMT = ZoneOffset("LMT", timedelta(seconds=-1500), ZERO)
             DMT = ZoneOffset("DMT", timedelta(seconds=-1521), ZERO)
@@ -497,62 +601,58 @@ class ZoneDumpData:
                 ZoneTransition(datetime(2487, 10, 26, 2), IST_1, GMT_1),
             ]
 
+        def _Europe_Lisbon():
+            WET = ZoneOffset("WET", ZERO, ZERO)
+            WEST = ZoneOffset("WEST", ONE_H, ONE_H)
+            CET = ZoneOffset("CET", ONE_H, ZERO)
+            CEST = ZoneOffset("CEST", timedelta(seconds=7200), ONE_H)
+
+            return [
+                ZoneTransition(datetime(1992, 3, 29, 1), WET, WEST),
+                ZoneTransition(datetime(1992, 9, 27, 2), WEST, CET),
+                ZoneTransition(datetime(1993, 3, 28, 2), CET, CEST),
+                ZoneTransition(datetime(1993, 9, 26, 3), CEST, CET),
+                ZoneTransition(datetime(1996, 3, 31, 2), CET, WEST),
+                ZoneTransition(datetime(1996, 10, 27, 2), WEST, WET),
+            ]
+
+        def _Europe_London():
+            LMT = ZoneOffset("LMT", timedelta(seconds=-75), ZERO)
+            GMT = ZoneOffset("GMT", ZERO, ZERO)
+            BST = ZoneOffset("BST", ONE_H, ONE_H)
+
+            return [
+                ZoneTransition(datetime(1847, 12, 1), LMT, GMT),
+                ZoneTransition(datetime(2005, 3, 27, 1), GMT, BST),
+                ZoneTransition(datetime(2005, 10, 30, 2), BST, GMT),
+                ZoneTransition(datetime(2043, 3, 29, 1), GMT, BST),
+                ZoneTransition(datetime(2043, 10, 25, 2), BST, GMT),
+            ]
+
+        def _Pacific_Kiritimati():
+            LMT = ZoneOffset("LMT", timedelta(seconds=-37760), ZERO)
+            N1040 = ZoneOffset("-1040", timedelta(seconds=-38400), ZERO)
+            N10 = ZoneOffset("-10", timedelta(seconds=-36000), ZERO)
+            P14 = ZoneOffset("+14", timedelta(seconds=50400), ZERO)
+
+            # This is literally every transition in Christmas Island history
+            return [
+                ZoneTransition(datetime(1901, 1, 1), LMT, N1040),
+                ZoneTransition(datetime(1979, 10, 1), N1040, N10),
+                # They skipped December 31, 1994
+                ZoneTransition(datetime(1994, 12, 31), N10, P14),
+            ]
+
         cls._ZONEDUMP_DATA = {
+            "Africa/Casablanca": _Africa_Casablanca(),
             "America/Los_Angeles": _America_Los_Angeles(),
+            "America/Santiago": _America_Santiago(),
+            "Australia/Sydney": _Australia_Sydney(),
+            "Asia/Tokyo": _Asia_Tokyo(),
             "Europe/Dublin": _Europe_Dublin(),
+            "Europe/Lisbon": _Europe_Lisbon(),
+            "Europe/London": _Europe_London(),
+            "Pacific/Kiritimati": _Pacific_Kiritimati(),
         }
 
     _ZONEDUMP_DATA = {}
-
-    ###
-    #
-    # Some example zoneinfo files: These are lzma-compressed and then b85 encoded
-    # encoded, to minimize the space taken up in this file
-    ZONEFILES = {
-        "America/Los_Angeles": b"""
-    {Wp48S^xk9=GL@E0stWa8~^|S5YJf5;0qH3OkDsf7KxBg5R*;z{h&-RlhRYu$%jt%!jv+IJxhE=%
-    W1?wYb!37Rb?(rgwFIAQI{L#8r*zy!$TMtER_1(vn(Zix^{AVB1(jwr$iL6h0Z!28Gb~UW@0~e51
-    2{Z%8}Qzdnjl~wJ1{c2>`Z@1A~t&lyL{p{eM{5)QGf7Mo5FW9==mlyXJt2UwpntR7H0eSq!(aYq#
-    aqUz&RM*tvuMI)AsM?K3-dV3-TT{t)!Iy#JTo=tXkzAM9~j2YbiOls3(H8Dc>Y|D1aqL51vjLbpY
-    G;GvGTQB4bXuJ%mA;(B4eUpu$$@zv2vVcq-Y)VKbzp^teiuzy}R{Luv<C;_cPe*n$Z<jeC9ogWF9
-    =1mvvUYXS>DjpuVb`79O+CBmg{Wx!bvx$eu4zRE&PehMb=&G<9$>iZ|bFE)0=4I?KLFGBC0I(0_s
-    vgw0%FiMsT%koo*!nEYc6GY@QnU}&4Isg;l=|khi(!VaiSE2=Ny`&&tpi~~;{$u<GHlsr3Ze!iYs
-    U205RFKsLnrXwOL?Mq08xffgS{6hE|figx+&N%wbO}re@|}$l;g_6J-Wl%j|qev8A<T?NJ)`;2ne
-    Gi_DHE4ET*W!c*ggPAgU+LE9=bH7;maCUikw^R)UM;TdVvNkQ;FGgN=yQER`SZ1nOgPXr0LCebLe
-    ty&}kVdmVmB=8eSgtd!1%p=a2wooIL!Da}OPXvKBfRo?YxqS>N}%f|7mBhAy;<Er2&_LfND#qXN~
-    Mkgf!@4VFAHr%$c)wrKA2cJYWK2>s3YT^sy!$eG~?`9mNJC9@4Bac_p^BZh)Yd_rWW5qh-?tKY(>
-    5VHOL*iT8P@wCavLj^yYbnDR+4ukhS+xPrpl)iqB?u)bj9a2aW==g6G3lCJd>(+Blf<d4CF%7utl
-    BUDki}J-!_Dy}5S(MrxSXy~$Z+hgH3P^<<w7D72L7I-R%H3(xm&q_DXxkp$owLTS6Wzkhc3nn;la
-    ROa3)6hl&gH#)2Lif8fZe$@CdeJ-Zn&*>r)~^40F4f>cRZ^UF;RibfZ>0m73hRC{$vTfC(STN`g7
-    (B<=Z2556{}0`?p&|Akkst!4Xy4OT;A@c$XTUI3FRRjy*KA7uC56FD)z^X{WV*sr(w!c$W357o!&
-    eLO2wTDNOyw@gf(&R<<LF_3URI4=Ei`-%dM3T66j#9!aG7&b_@g1-9vo?DzXZ5vGaf~w__p_@_X?
-    OdvQ_r5bvy2hpESTf+{p?jL+!~!{g8-<-5$@d8EZV&-5@a|;^1gB*R-~{EHFA-td_G2bt;~Y}>t;
-    =-Tu1TV{>%8ZVATC9tjD8|(&`$9YHvZ9bVe#>w|8c;Tg|xE&)`*}LwM*E}q}q8^Qja%p`_U)*5Dd
-    LI9O@!e=3jFjOCrCq28b_bb;s>%D#iJBCWJi{JH!Js;6nfayos$kq^OEX00HO-
-    lokL0!mqm{vBYQl0ssI200dcD
-    """,
-        "Europe/Dublin": b"""
-    {Wp48S^xk9=GL@E0stWa8~^|S5YJf5;0>b$_+0=h7KxBg5R*;&J77#T_U2R5sleVWFDmK~Kzj5oh
-    @`<njquRZ&tJIS(cXp1>QKHvW^6V{jU-w>qg1tSt0c^vh;?qAqA0%t?;#S~6U8Qiv&f1s9IH#g$m
-    1k1a#3+lylw4mwT4QnEUUQdwg+xnEcBlgu31bAVabn41OMZVLGz6NDwG%XuQar!b>GI{qSahE`AG
-    }$kRWbuI~JCt;38)Xwbb~Qggs55t+MAHIxgDxzTJ;2xXx99+qCy445kC#v_l8fx|G&jlVvaciR<-
-    wwf22l%4(t@S6tnX39#_K(4S0fu$FUs$isu<UOJYm|4)2iaEpsajn@}B#rnY=Cg_TXsm-A)*adXV
-    &$klNTn3n{XXlaquu}6m{k%oRmY0Yyhlj*<W{D5m22}OiqnwHT!tnK`wPqx?wiF%v{ipTrOkcJ5P
-    @7OC4(-l`*&SB$Wd4Vf8gn?>d<i@%mP*e*ttDj`9M1;9$YV@dhT)DVcwdq(Ly~KDm_&KL?{_mFww
-    YtJqRZBk)i1FVQy!40w_KyAg?hIA=_{(3#S0eWsF8f%_4Zza$4@$lSmov+Huyn$vP^zJ|8-<C3#q
-    #0kEs9cNg^xUR(m?wEWt-DGctAh2nIo~fz%$m$I41=b_WuJ6M9g#A9_Epwqw{d0B|vzmg#_y<=_>
-    9IKzCXB<o`d)**5V6g!<<Jw1n5TrN-$)aYz4cLsTmpsUf-6L7ix+kk>78NkARYq@9Dc0TGkhz);N
-    tM_SSzEffNl{2^*CKGdp52h!52A)6q9fUSltXF{T*Ehc9Q7u8!W7pE(Fv$D$cKUAt6wY=DA1mGgx
-    C*VXq_If3G#FY6-Voj`fIKk`0}Cc72_SD{v>468LV{pyBI33^p0E?}RwDA6Pkq--C~0jF&Z@Pv!d
-    x_1SN_)jwz@P$(oK%P!Tk9?fRjK88yxhxlcFtTjjZ$DYssSsa#ufYrR+}}nKS+r384o~!Uw$nwTb
-    F~qgRsgr0N#d@KIinx%<pnyQ!|>hQB(SJyjJtDtIy(%mDm}ZBGN}dV6K~om|=UVGkbciQ=^$_14|
-    gT21!YQ)@y*Rd0i_lS6gtPBE9+ah%WIJPwzUTjIr+J1XckkmA!6WE16%CVAl{Dn&-)=G$Bjh?bh0
-    $Xt1UDcgXJjXzzojuw0>paV~?Sa`VN3FysqF<S*L0RYSAY3jt(8wCD04RfyEcP(RNT%x7k(7m-9H
-    3{zuQ`RZy-Rz%*&dldDVFF+TwSAPO1wRX^5W5@xJ9{vWw?rc^NH({%Ie<rxKqSVy!Le-_`U&@W_(
-    D+>xTzfKVAu*ucq#+m=|KSSMvp_#@-lwd+q*ueFQ^5<D+|jLr?k{O39i8AX2Qb^zi9A<7XD1y!-W
-    2|0Hk8JVkN;gl><|<0R-u4qYMbRqzSn&Q7jSuvc%b+EZc%>nI(+&0Tl1Y>a6v4`uNFD-7$QrhHgS
-    7Wnv~rDgfH;rQw3+m`LJxoM4v#gK@?|B{RHJ*VxZgk#!p<_&-sjxOda0YaiJ1UnG41VPv(Et%Elz
-    KRMcO$AfgU+Xnwg5p2_+NrnZ1WfEj^fmHd^sx@%JWKkh#zaK0ox%rdP)zUmGZZnqmZ_9L=%6R8ib
-    JH0bOT$AGhDo6{fJ?;_U;D|^>5by2ul@i4Zf()InfFN}00EQ=q#FPL>RM>svBYQl0ssI200dcD
-    """,
-    }
