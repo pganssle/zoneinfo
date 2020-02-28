@@ -80,9 +80,9 @@ class ZoneInfoTest(unittest.TestCase):
                 tzi = self.zone_from_key(key)
                 dt = dt.replace(tzinfo=tzi)
 
-                self.assertEqual(dt.tzname(), offset.tzname)
-                self.assertEqual(dt.utcoffset(), offset.utcoffset)
-                self.assertEqual(dt.dst(), offset.dst)
+                self.assertEqual(dt.tzname(), offset.tzname, dt)
+                self.assertEqual(dt.utcoffset(), offset.utcoffset, dt)
+                self.assertEqual(dt.dst(), offset.dst, dt)
 
     def test_folds_and_gaps(self):
         test_cases = []
@@ -131,9 +131,9 @@ class ZoneInfoTest(unittest.TestCase):
                 for dt, fold, offset in tests:
                     dt = dt.replace(fold=fold, tzinfo=tzi)
 
-                    self.assertEqual(dt.tzname(), offset.tzname)
-                    self.assertEqual(dt.utcoffset(), offset.utcoffset)
-                    self.assertEqual(dt.dst(), offset.dst)
+                    self.assertEqual(dt.tzname(), offset.tzname, dt)
+                    self.assertEqual(dt.utcoffset(), offset.utcoffset, dt)
+                    self.assertEqual(dt.dst(), offset.dst, dt)
 
 
 class TzPathUserMixin:
