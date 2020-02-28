@@ -529,6 +529,19 @@ class ZoneDumpData:
                 ZoneTransition(datetime(2450, 11, 6, 2), PDT, PST),
             ]
 
+        def _Asia_Tokyo():
+            JST = ZoneOffset("JST", timedelta(seconds=32400), ZERO)
+            JDT = ZoneOffset("JDT", timedelta(seconds=36000), ONE_H)
+
+            # Japan had DST from 1948 to 1951, and it was unusual in that
+            # the transition from DST to STD occurred at 25:00, and is
+            # denominated as such in the time zone database
+            return [
+                ZoneTransition(datetime(1948, 5, 2), JST, JDT),
+                ZoneTransition(datetime(1948, 9, 12, 1), JDT, JST),
+                ZoneTransition(datetime(1951, 9, 9, 1), JDT, JST),
+            ]
+
         def _Australia_Sydney():
             LMT = ZoneOffset("LMT", timedelta(seconds=36292), ZERO)
             AEST = ZoneOffset("AEST", timedelta(seconds=36000), ZERO)
@@ -597,6 +610,7 @@ class ZoneDumpData:
             "Africa/Casablanca": _Africa_Casablanca(),
             "America/Los_Angeles": _America_Los_Angeles(),
             "Australia/Sydney": _Australia_Sydney(),
+            "Asia/Tokyo": _Asia_Tokyo(),
             "Europe/Dublin": _Europe_Dublin(),
             "Europe/Lisbon": _Europe_Lisbon(),
             "Pacific/Kiritimati": _Pacific_Kiritimati(),
