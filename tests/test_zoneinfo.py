@@ -608,6 +608,19 @@ class ZoneDumpData:
                 ZoneTransition(datetime(1996, 10, 27, 2), WEST, WET),
             ]
 
+        def _Europe_London():
+            LMT = ZoneOffset("LMT", timedelta(seconds=-75), ZERO)
+            GMT = ZoneOffset("GMT", ZERO, ZERO)
+            BST = ZoneOffset("BST", ONE_H, ONE_H)
+
+            return [
+                ZoneTransition(datetime(1847, 12, 1), LMT, GMT),
+                ZoneTransition(datetime(2005, 3, 27, 1), GMT, BST),
+                ZoneTransition(datetime(2005, 10, 30, 2), BST, GMT),
+                ZoneTransition(datetime(2043, 3, 29, 1), GMT, BST),
+                ZoneTransition(datetime(2043, 10, 25, 2), BST, GMT),
+            ]
+
         def _Pacific_Kiritimati():
             LMT = ZoneOffset("LMT", timedelta(seconds=-37760), ZERO)
             N1040 = ZoneOffset("-1040", timedelta(seconds=-38400), ZERO)
@@ -630,6 +643,7 @@ class ZoneDumpData:
             "Asia/Tokyo": _Asia_Tokyo(),
             "Europe/Dublin": _Europe_Dublin(),
             "Europe/Lisbon": _Europe_Lisbon(),
+            "Europe/London": _Europe_London(),
             "Pacific/Kiritimati": _Pacific_Kiritimati(),
         }
 
