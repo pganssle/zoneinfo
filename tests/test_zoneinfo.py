@@ -529,6 +529,23 @@ class ZoneDumpData:
                 ZoneTransition(datetime(2450, 11, 6, 2), PDT, PST),
             ]
 
+        def _America_Santiago():
+            LMT = ZoneOffset("LMT", timedelta(seconds=-16966), ZERO)
+            SMT = ZoneOffset("SMT", timedelta(seconds=-16966), ZERO)
+            N05 = ZoneOffset("-05", timedelta(seconds=-18000), ZERO)
+            N04 = ZoneOffset("-04", timedelta(seconds=-14400), ZERO)
+            N03 = ZoneOffset("-03", timedelta(seconds=-10800), ONE_H)
+
+            return [
+                ZoneTransition(datetime(1890, 1, 1), LMT, SMT),
+                ZoneTransition(datetime(1910, 1, 10), SMT, N05),
+                ZoneTransition(datetime(1916, 7, 1), N05, SMT),
+                ZoneTransition(datetime(2008, 3, 30), N03, N04),
+                ZoneTransition(datetime(2008, 10, 12), N04, N03),
+                ZoneTransition(datetime(2040, 4, 8), N03, N04),
+                ZoneTransition(datetime(2040, 9, 2), N04, N03),
+            ]
+
         def _Asia_Tokyo():
             JST = ZoneOffset("JST", timedelta(seconds=32400), ZERO)
             JDT = ZoneOffset("JDT", timedelta(seconds=36000), ONE_H)
@@ -609,6 +626,7 @@ class ZoneDumpData:
         cls._ZONEDUMP_DATA = {
             "Africa/Casablanca": _Africa_Casablanca(),
             "America/Los_Angeles": _America_Los_Angeles(),
+            "America/Santiago": _America_Santiago(),
             "Australia/Sydney": _Australia_Sydney(),
             "Asia/Tokyo": _Asia_Tokyo(),
             "Europe/Dublin": _Europe_Dublin(),
