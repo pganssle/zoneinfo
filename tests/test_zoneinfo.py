@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import dataclasses
 import importlib.metadata
 import io
@@ -24,6 +25,7 @@ except importlib.metadata.PackageNotFoundError:
     HAS_TZDATA_PKG = False
 
 TZPATH_LOCK = threading.Lock()
+TZPATH_TEST_LOCK = threading.Lock()
 
 ZONEINFO_DATA = None
 TEMP_DIR = None
@@ -47,7 +49,43 @@ def tearDownModule():
     shutil.rmtree(TEMP_DIR)
 
 
-class ZoneInfoTest(unittest.TestCase):
+@contextlib.contextmanager
+def tzpath_context(tzpath, lock=TZPATH_LOCK):
+    with lock:
+        # TODO: Expose a public mechanism to get this information
+        old_path = zoneinfo._zoneinfo.TZPATH
+        try:
+            zoneinfo.set_tzpath(tzpath)
+            yield
+        finally:
+            zoneinfo.set_tzpath(old_path)
+
+
+class TzPathUserMixin:
+    """
+    Adds a setUp() and tearDown() to make TZPATH manipulations thread-safe.
+
+    Any tests that require manipulation of the TZPATH global are necessarily
+    thread unsafe, so we will acquire a lock and reset the TZPATH variable
+    to the default state before each test and release the lock after the test
+    is through.
+    """
+
+    @property
+    def tzpath(self):
+        return None
+
+    def setUp(self):
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(
+                tzpath_context(self.tzpath, lock=TZPATH_TEST_LOCK)
+            )
+            self.addCleanup(stack.pop_all().close)
+
+        super().setUp()
+
+
+class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
     def zone_from_key(self, key):
         with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
             return ZoneInfo.from_file(f, key=key)
@@ -136,28 +174,10 @@ class ZoneInfoTest(unittest.TestCase):
                     self.assertEqual(dt.dst(), offset.dst, dt)
 
 
-class TzPathUserMixin:
-    """
-    Adds a setUp() and tearDown() to make TZ_PATHS manipulations thread-safe.
-
-    Any tests that require manipulation of the TZ_PATHS global are necessarily
-    thread unsafe, so we will acquire a lock and reset the TZ_PATHS variable
-    to the default state before each test and release the lock after the test
-    is through.
-    """
-
-    def setUp(self):
-        TZPATH_LOCK.acquire()
-        zoneinfo.set_tzpath()
-
-    def tearDown(self):
-        TZPATH_LOCK.release()
-
-
 @unittest.skipIf(
     not HAS_TZDATA_PKG, "Skipping tzdata-specific tests: tzdata not installed"
 )
-class TZDataTests(ZoneInfoTest, TzPathUserMixin):
+class TZDataTests(ZoneInfoTest):
     """
     Runs all the ZoneInfoTest tests, but against the tzdata package
 
@@ -166,13 +186,9 @@ class TZDataTests(ZoneInfoTest, TzPathUserMixin):
     in the event that the time zone policies in the relevant time zones change.
     """
 
-    def setUp(self):
-        super().setUp()
-        self._old_tz_path = tuple(zoneinfo.TZPATH)
-        zoneinfo.set_tzpath([])
-
-    def tearDown(self):
-        zoneinfo.set_tzpath(self._old_tz_path)
+    @property
+    def tzpath(self):
+        return []
 
     def zone_from_key(self, key):
         return ZoneInfo(key=key)
@@ -373,13 +389,10 @@ class TZStrTest(unittest.TestCase):
                     self.assertEqual(dt.utcoffset(), expected_tzoffset)
 
 
-class ZoneInfoCacheTest(unittest.TestCase):
+class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
     def setUp(self):
         ZoneInfo.clear_cache()
-        zoneinfo.set_tzpath(self.tzpath)
-
-    def tearDown(self):
-        zoneinfo.set_tzpath()
+        super().setUp()
 
     @property
     def tzpath(self):
