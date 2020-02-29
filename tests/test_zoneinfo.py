@@ -416,6 +416,18 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
 
         self.assertIsNot(tz0, tz1)
 
+    def test_cache_set_tzpath(self):
+        """Test that the cache persists when tzpath has been changed.
+
+        The PEP specifies that as long as a reference exists to one zone
+        with a given key, the primary constructor must continue to return
+        the same object.
+        """
+        zi0 = ZoneInfo("America/Los_Angeles")
+        with tzpath_context([]):
+            zi1 = ZoneInfo("America/Los_Angeles")
+
+        self.assertIs(zi0, zi1)
 
 @dataclasses.dataclass
 class ZoneOffset:
