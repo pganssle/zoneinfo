@@ -429,6 +429,35 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
 
         self.assertIs(zi0, zi1)
 
+    def test_clear_cache_one_key(self):
+        """Tests that you can clear a single key from the cache."""
+        la0 = ZoneInfo("America/Los_Angeles")
+        dub0 = ZoneInfo("Europe/Dublin")
+
+        ZoneInfo.clear_cache(only_keys=["America/Los_Angeles"])
+
+        la1 = ZoneInfo("America/Los_Angeles")
+        dub1 = ZoneInfo("Europe/Dublin")
+
+        self.assertIsNot(la0, la1)
+        self.assertIs(dub0, dub1)
+
+    def test_clear_cache_two_keys(self):
+        la0 = ZoneInfo("America/Los_Angeles")
+        dub0 = ZoneInfo("Europe/Dublin")
+        tok0 = ZoneInfo("Asia/Tokyo")
+
+        ZoneInfo.clear_cache(only_keys=["America/Los_Angeles", "Europe/Dublin"])
+
+        la1 = ZoneInfo("America/Los_Angeles")
+        dub1 = ZoneInfo("Europe/Dublin")
+        tok1 = ZoneInfo("Asia/Tokyo")
+
+        self.assertIsNot(la0, la1)
+        self.assertIsNot(dub0, dub1)
+        self.assertIs(tok0, tok1)
+
+
 @dataclasses.dataclass
 class ZoneOffset:
     tzname: str
