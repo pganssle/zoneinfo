@@ -30,7 +30,7 @@ jobs:
     runs-on: "ubuntu-latest"
     strategy:
       matrix:
-        toxenv: ["format", "build"]
+        toxenv: ["lint", "build"]
     env:
       TOXENV: ${{ matrix.toxenv }}
 
