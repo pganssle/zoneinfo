@@ -104,9 +104,15 @@ class ZoneInfo(tzinfo):
         return obj
 
     @classmethod
-    def clear_cache(cls):
-        cls.__weak_cache.clear()
-        cls.__strong_cache.clear()
+    def clear_cache(cls, *, only_keys=None):
+        if only_keys is not None:
+            for key in only_keys:
+                cls.__weak_cache.pop(key, None)
+                cls.__strong_cache.pop(key, None)
+
+        else:
+            cls.__weak_cache.clear()
+            cls.__strong_cache.clear()
 
     def _load_tzdata(self, key):
         # TODO: Proper error for malformed keys?
