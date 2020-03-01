@@ -12,6 +12,7 @@ jobs:
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
     env:
       TOXENV: py
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     steps:
     - uses: actions/checkout@v2
@@ -25,6 +26,7 @@ jobs:
     - name: Run tests
       run: |
         tox
+        tox -e coverage-report,codecov
 
   other:
     runs-on: "ubuntu-latest"
