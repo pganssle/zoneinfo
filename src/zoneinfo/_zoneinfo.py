@@ -148,25 +148,30 @@ class ZoneInfo(tzinfo):
 
         timestamp = self._get_local_timestamp(dt)
 
-        # TODO: Why [1]?
-        if len(self._trans_utc) >= 2 and timestamp < self._trans_utc[1]:
+        if len(self._trans_utc) >= 1 and timestamp < self._trans_utc[0]:
             tti = self._tti_before
             fold = 0
-        elif timestamp > self._trans_utc[-1]:
-            if isinstance(self._tz_after, _ttinfo):
-                tti = self._tz_after
-            else:
-                tti, fold = self._tz_after.get_trans_info_fromutc(
-                    timestamp, dt.year
-                )
+        elif timestamp > self._trans_utc[-1] and not isinstance(
+            self._tz_after, _ttinfo
+        ):
+            tti, fold = self._tz_after.get_trans_info_fromutc(
+                timestamp, dt.year
+            )
         else:
             idx = bisect.bisect_right(self._trans_utc, timestamp)
 
-            tti_prev, tti = self._ttinfos[idx - 2 : idx]
+            if len(self._trans_utc) > 1 and timestamp >= self._trans_utc[1]:
+                tti_prev, tti = self._ttinfos[idx - 2 : idx]
+            elif timestamp > self._trans_utc[-1]:
+                tti_prev = self._ttinfos[-1]
+                tti = self._tz_after
+            else:
+                tti_prev = self._tti_before
+                tti = self._ttinfos[0]
 
             # Detect fold
-            shift = tti_prev[0] - tti[0]
-            fold = shift > timedelta(0, timestamp - self.trans_utc[idx - 1])
+            shift = tti_prev.utcoff - tti.utcoff
+            fold = shift > timedelta(0, timestamp - self._trans_utc[idx - 1])
         dt += tti.utcoff
         if fold:
             return dt.replace(fold=1)
@@ -575,8 +580,14 @@ class _TZStr:
         # For positive DST, the ambiguous period is one dst_diff after the end
         # of DST; for negative DST, the ambiguous period is one dst_diff before
         # the start of DST.
-        ambig_start = end if self.dst_diff > 0 else end
-        fold = ambig_start <= ts < ambig_start + self.dst_diff
+        if self.dst_diff > 0:
+            ambig_start = end
+            ambig_end = end + self.dst_diff
+        else:
+            ambig_start = start
+            ambig_end = start - self.dst_diff
+
+        fold = ambig_start <= ts < ambig_end
 
         return (self.dst if isdst else self.std, fold)
 

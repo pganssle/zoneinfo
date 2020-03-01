@@ -173,6 +173,25 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
                     self.assertEqual(dt.utcoffset(), offset.utcoffset, dt)
                     self.assertEqual(dt.dst(), offset.dst, dt)
 
+    def test_folds_from_utc(self):
+        tests = []
+        for key in self.zones():
+            zi = self.zone_from_key(key)
+            with self.subTest(key=key):
+                for zt in ZoneDumpData.load_transition_examples(key):
+                    if not zt.fold:
+                        continue
+
+                    dt_utc = zt.transition_utc
+                    dt_before_utc = dt_utc - timedelta(seconds=1)
+                    dt_after_utc = dt_utc + timedelta(seconds=1)
+
+                    dt_before = dt_before_utc.astimezone(zi)
+                    self.assertEqual(dt_before.fold, 0, (dt_before, dt_utc))
+
+                    dt_after = dt_after_utc.astimezone(zi)
+                    self.assertEqual(dt_after.fold, 1, (dt_after, dt_utc))
+
 
 @unittest.skipIf(
     not HAS_TZDATA_PKG, "Skipping tzdata-specific tests: tzdata not installed"
@@ -470,6 +489,12 @@ class ZoneTransition:
     transition: datetime
     offset_before: ZoneOffset
     offset_after: ZoneOffset
+
+    @property
+    def transition_utc(self):
+        return (self.transition - self.offset_before.utcoffset).replace(
+            tzinfo=timezone.utc
+        )
 
     @property
     def fold(self):
