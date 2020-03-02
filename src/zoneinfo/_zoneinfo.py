@@ -100,6 +100,7 @@ class ZoneInfo(tzinfo):
         obj._key = key
         obj._file_path = None
         obj._load_file(fobj)
+        obj._file_repr = repr(fobj)
 
         return obj
 
@@ -212,7 +213,10 @@ class ZoneInfo(tzinfo):
             return repr(self)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}(file_path={self._file_path!r}, key={self._key!r})"
+        if self._key is not None:
+            return f"{self.__class__.__name__}(key={self._key!r})"
+        else:
+            return f"{self.__class__.__name__}.from_file({self._file_repr})"
 
     def _find_tzfile(self, key):
         for search_path in TZPATH:

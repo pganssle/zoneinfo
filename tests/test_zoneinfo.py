@@ -86,12 +86,56 @@ class TzPathUserMixin:
 
 
 class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
+    @property
+    def tzpath(self):
+        return [TEMP_DIR]
+
     def zone_from_key(self, key):
-        with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
-            return ZoneInfo.from_file(f, key=key)
+        return ZoneInfo(key)
 
     def zones(self):
         return ZoneDumpData.transition_keys()
+
+    def test_str(self):
+        # Zones constructed with a key must have str(zone) == key
+        for key in self.zones():
+            with self.subTest(key):
+                zi = self.zone_from_key(key)
+
+                self.assertEqual(str(zi), key)
+
+        # Zones with no key constructed should have str(zone) == repr(zone)
+        file_key = ZONEINFO_DATA.keys[0]
+        file_path = ZONEINFO_DATA.path_from_key(file_key)
+
+        with open(file_path, "rb") as f:
+            with self.subTest(test_name="Repr test", path=file_path):
+                zi_ff = ZoneInfo.from_file(f)
+                self.assertEqual(str(zi_ff), repr(zi_ff))
+
+    def test_repr(self):
+        # The repr is not guaranteed, but I think we can insist that it at
+        # least contain the name of the class.
+        key = next(iter(self.zones()))
+
+        zi = ZoneInfo(key)
+        class_name = "ZoneInfo"
+        with self.subTest(name="from key"):
+            self.assertRegex(repr(zi), class_name)
+
+        file_key = ZONEINFO_DATA.keys[0]
+        file_path = ZONEINFO_DATA.path_from_key(file_key)
+        with open(file_path, "rb") as f:
+            zi_ff = ZoneInfo.from_file(f, key=file_key)
+
+        with self.subTest(name="from file with key"):
+            self.assertRegex(repr(zi_ff), class_name)
+
+        with open(file_path, "rb") as f:
+            zi_ff_nk = ZoneInfo.from_file(f)
+
+        with self.subTest(name="from file without key"):
+            self.assertRegex(repr(zi_ff_nk), class_name)
 
     def test_unambiguous(self):
         test_cases = []
