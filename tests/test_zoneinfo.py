@@ -475,6 +475,60 @@ class TZStrTest(unittest.TestCase):
                 (datetime(2020, 11, 1), M03, NORMAL),
             )
 
+        @call
+        def _add():
+            # Permanent daylight saving time is modeled with transitions at 0/0
+            # and J365/25, as mentioned in RFC 8536 Section 3.3.1
+            tzstr = "EST5EDT,0/0,J365/25"
+
+            EDT = ZoneOffset("EDT", timedelta(hours=-4), ONE_H)
+
+            cases[tzstr] = (
+                (datetime(2019, 1, 1), EDT, NORMAL),
+                (datetime(2019, 6, 1), EDT, NORMAL),
+                (datetime(2019, 12, 31, 23, 59, 59, 999999), EDT, NORMAL),
+                (datetime(2020, 1, 1), EDT, NORMAL),
+                (datetime(2020, 3, 1), EDT, NORMAL),
+                (datetime(2020, 6, 1), EDT, NORMAL),
+                (datetime(2020, 12, 31, 23, 59, 59, 999999), EDT, NORMAL),
+                (datetime(2400, 1, 1), EDT, NORMAL),
+                (datetime(2400, 3, 1), EDT, NORMAL),
+                (datetime(2400, 12, 31, 23, 59, 59, 999999), EDT, NORMAL),
+            )
+
+        @call
+        def _add():
+            # Transitions on March 1st and November 1st of each year
+            tzstr = "AAA3BBB,J60/12,J305/12"
+
+            AAA = ZoneOffset("AAA", timedelta(hours=-3))
+            BBB = ZoneOffset("BBB", timedelta(hours=-2), ONE_H)
+
+            cases[tzstr] = (
+                (datetime(2019, 1, 1), AAA, NORMAL),
+                (datetime(2019, 2, 28), AAA, NORMAL),
+                (datetime(2019, 3, 1, 11, 59), AAA, NORMAL),
+                (datetime(2019, 3, 1, 12, fold=0), AAA, GAP),
+                (datetime(2019, 3, 1, 12, fold=1), BBB, GAP),
+                (datetime(2019, 3, 1, 13), BBB, NORMAL),
+                (datetime(2019, 11, 1, 10, 59), BBB, NORMAL),
+                (datetime(2019, 11, 1, 11, fold=0), BBB, FOLD),
+                (datetime(2019, 11, 1, 11, fold=1), AAA, FOLD),
+                (datetime(2019, 11, 1, 12), AAA, NORMAL),
+                (datetime(2019, 12, 31, 23, 59, 59, 999999), AAA, NORMAL),
+                (datetime(2020, 1, 1), AAA, NORMAL),
+                (datetime(2020, 2, 29), AAA, NORMAL),
+                (datetime(2020, 3, 1, 11, 59), AAA, NORMAL),
+                (datetime(2020, 3, 1, 12, fold=0), AAA, GAP),
+                (datetime(2020, 3, 1, 12, fold=1), BBB, GAP),
+                (datetime(2020, 3, 1, 13), BBB, NORMAL),
+                (datetime(2020, 11, 1, 10, 59), BBB, NORMAL),
+                (datetime(2020, 11, 1, 11, fold=0), BBB, FOLD),
+                (datetime(2020, 11, 1, 11, fold=1), AAA, FOLD),
+                (datetime(2020, 11, 1, 12), AAA, NORMAL),
+                (datetime(2020, 12, 31, 23, 59, 59, 999999), AAA, NORMAL),
+            )
+
         self.cases = cases
         return self.cases
 
