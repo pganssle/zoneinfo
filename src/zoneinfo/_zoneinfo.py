@@ -523,31 +523,24 @@ class _TZStr:
         self.start = start
         self.end = end
 
-        if dst_abbr is not None:
-            dst_offset = _load_timedelta(dst_offset)
-            delta = _load_timedelta(self.dst_diff)
-            self.dst = _ttinfo(utcoff=dst_offset, dstoff=delta, tzname=dst_abbr)
+        dst_offset = _load_timedelta(dst_offset)
+        delta = _load_timedelta(self.dst_diff)
+        self.dst = _ttinfo(utcoff=dst_offset, dstoff=delta, tzname=dst_abbr)
 
-            if start is None or end is None:
-                raise ValueError("Must specify start and end for TZStr")
-            self.get_trans_info = self._get_trans_info_dst
-            self.get_trans_info_fromutc = self._get_trans_info_dst_fromutc
-        else:
-            self.dst = None
-            self.dst_offset = 0
-            self.get_trans_info = self._get_trans_info_static
-            self.get_trans_info_fromutc = self._get_trans_info_static
+        # These are assertions because the constructor should only be called
+        # by functions that would fail before passing start or end
+        assert start is not None, "No transition start specified"
+        assert end is not None, "No transition end specified"
+
+        self.get_trans_info = self._get_trans_info
+        self.get_trans_info_fromutc = self._get_trans_info_fromutc
 
     def transitions(self, year):
         start = self.start.year_to_epoch(year)
         end = self.end.year_to_epoch(year)
         return start, end
 
-    def _get_trans_info_static(self, ts):
-        """Get the information about the current transition - fold and tti"""
-        return self.std
-
-    def _get_trans_info_dst(self, ts, year, fold):
+    def _get_trans_info(self, ts, year, fold):
         """Get the information about the current transition - tti"""
         start, end = self.transitions(year)
 
@@ -571,7 +564,7 @@ class _TZStr:
 
         return self.dst if isdst else self.std
 
-    def _get_trans_info_dst_fromutc(self, ts, year):
+    def _get_trans_info_fromutc(self, ts, year):
         start, end = self.transitions(year)
         start -= self.std.utcoff.total_seconds()
         end -= self.dst.utcoff.total_seconds()
