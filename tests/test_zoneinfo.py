@@ -29,6 +29,7 @@ TZPATH_LOCK = threading.Lock()
 TZPATH_TEST_LOCK = threading.Lock()
 
 ZONEINFO_DATA = None
+ZONEINFO_DATA_V1 = None
 TEMP_DIR = None
 DATA_DIR = pathlib.Path(__file__).parent / "data"
 ZONEINFO_JSON = DATA_DIR / "zoneinfo_data.json"
@@ -41,9 +42,11 @@ ONE_H = timedelta(hours=1)
 def setUpModule():
     global TEMP_DIR
     global ZONEINFO_DATA
+    global ZONEINFO_DATA_V1
 
     TEMP_DIR = pathlib.Path(tempfile.mkdtemp(prefix="zoneinfo"))
-    ZONEINFO_DATA = ZoneInfoData(ZONEINFO_JSON, TEMP_DIR)
+    ZONEINFO_DATA = ZoneInfoData(ZONEINFO_JSON, TEMP_DIR / "v2")
+    ZONEINFO_DATA_V1 = ZoneInfoData(ZONEINFO_JSON, TEMP_DIR / "v1", v1=True)
 
 
 def tearDownModule():
@@ -73,7 +76,7 @@ class TzPathUserMixin:
     """
 
     @property
-    def tzpath(self):
+    def tzpath(self):  # pragma: nocover
         return None
 
     def setUp(self):
@@ -89,13 +92,16 @@ class TzPathUserMixin:
 class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
     @property
     def tzpath(self):
-        return [TEMP_DIR]
+        return [ZONEINFO_DATA.tzpath]
 
     def zone_from_key(self, key):
         return ZoneInfo(key)
 
     def zones(self):
         return ZoneDumpData.transition_keys()
+
+    def load_transition_examples(self, key):
+        return ZoneDumpData.load_transition_examples(key)
 
     def test_str(self):
         # Zones constructed with a key must have str(zone) == key
@@ -141,7 +147,7 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
     def test_unambiguous(self):
         test_cases = []
         for key in self.zones():
-            for zone_transition in ZoneDumpData.load_transition_examples(key):
+            for zone_transition in self.load_transition_examples(key):
                 test_cases.append(
                     (
                         key,
@@ -171,7 +177,7 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
         test_cases = []
         for key in self.zones():
             tests = {"folds": [], "gaps": []}
-            for zt in ZoneDumpData.load_transition_examples(key):
+            for zt in self.load_transition_examples(key):
                 if zt.fold:
                     test_group = tests["folds"]
                 elif zt.gap:
@@ -223,7 +229,7 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
         for key in self.zones():
             zi = self.zone_from_key(key)
             with self.subTest(key=key):
-                for zt in ZoneDumpData.load_transition_examples(key):
+                for zt in self.load_transition_examples(key):
                     if not zt.fold:
                         continue
 
@@ -236,6 +242,24 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
 
                     dt_after = dt_after_utc.astimezone(zi)
                     self.assertEqual(dt_after.fold, 1, (dt_after, dt_utc))
+
+
+class ZoneInfoV1Test(ZoneInfoTest):
+    @property
+    def tzpath(self):
+        return [ZONEINFO_DATA_V1.tzpath]
+
+    def load_transition_examples(self, key):
+        # We will discard zdump examples outside the range epoch +/- 2**31,
+        # because they are not well-supported in Version 1 files.
+        epoch = datetime(1970, 1, 1)
+        max_offset_32 = timedelta(seconds=2 ** 31)
+        min_dt = epoch - max_offset_32
+        max_dt = epoch + max_offset_32
+
+        for zt in ZoneDumpData.load_transition_examples(key):
+            if min_dt <= zt.transition <= max_dt:
+                yield zt
 
 
 @unittest.skipIf(
@@ -606,7 +630,7 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
 
     @property
     def tzpath(self):
-        return [TEMP_DIR]
+        return [ZONEINFO_DATA.tzpath]
 
     def test_ephemeral_zones(self):
         self.assertIs(
@@ -717,9 +741,10 @@ class ZoneTransition:
 
 
 class ZoneInfoData:
-    def __init__(self, source_json, tzpath):
+    def __init__(self, source_json, tzpath, v1=False):
         self.tzpath = pathlib.Path(tzpath)
         self.keys = []
+        self.v1 = v1
         self._populate_tzpath(source_json)
 
     def path_from_key(self, key):
@@ -732,16 +757,39 @@ class ZoneInfoData:
         for key, value in zoneinfo_dict.items():
             self.keys.append(key)
             raw_data = self._decode_text(value)
+
+            if self.v1:
+                data = self._convert_to_v1(raw_data)
+            else:
+                data = raw_data
+
             destination = self.path_from_key(key)
             destination.parent.mkdir(exist_ok=True, parents=True)
             with open(destination, "wb") as f:
-                f.write(raw_data)
+                f.write(data)
 
     def _decode_text(self, contents):
         raw_data = b"".join(map(str.encode, contents))
         decoded = base64.b85decode(raw_data)
 
         return lzma.decompress(decoded)
+
+    def _convert_to_v1(self, contents):
+        assert contents[0:4] == b"TZif", "Invalid TZif data found!"
+        version = int(contents[5])
+
+        header_start = 6 + 16
+        header_end = header_start + 24  # 6l == 24 bytes
+        assert version != 1, "Version 1 file found: no conversion necessary"
+        isutcnt, isstdcnt, leapcnt, timecnt, typecnt, charcnt = struct.unpack(
+            ">6l", contents[header_start:header_end]
+        )
+
+        file_size = typecnt * 5 + charcnt * 6 + leapcnt * 8 + isstdcnt + isutcnt
+        file_size += header_end
+        out = b"TZif" + b"1" + contents[5 : (file_size + 5)]
+
+        return out
 
 
 class ZoneDumpData:
