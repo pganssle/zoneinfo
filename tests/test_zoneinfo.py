@@ -262,6 +262,10 @@ class TZStrTest(unittest.TestCase):
     FOLD = 1
     GAP = 2
 
+    @classmethod
+    def setUpClass(cls):
+        cls._populate_test_cases()
+
     def _zone_from_tzstr(self, tzstr):
         """Creates a zoneinfo file following a POSIX rule."""
         zonefile = io.BytesIO()
@@ -295,7 +299,7 @@ class TZStrTest(unittest.TestCase):
 
     def test_tzstr_localized(self):
         i = 0
-        for tzstr, cases in self.test_cases().items():
+        for tzstr, cases in self.test_cases.items():
             with self.subTest(tzstr=tzstr):
                 zi = self._zone_from_tzstr(tzstr)
 
@@ -308,7 +312,7 @@ class TZStrTest(unittest.TestCase):
                     self.assertEqual(dt.dst(), offset.dst)
 
     def test_tzstr_from_utc(self):
-        for tzstr, cases in self.test_cases().items():
+        for tzstr, cases in self.test_cases.items():
             with self.subTest(tzstr=tzstr):
                 zi = self._zone_from_tzstr(tzstr)
 
@@ -336,17 +340,35 @@ class TZStrTest(unittest.TestCase):
 
                 self.assertEqual(dt_act, dt_utc)
 
-    def test_cases(self):
-        cases = getattr(self, "cases", {})
-        if cases:
-            return cases
-
+    @classmethod
+    def _populate_test_cases(cls):
+        # This method uses a somewhat unusual style in that it populates the
+        # test cases for each tzstr by using a decorator to automatically call
+        # a function that mutates the current dictionary of test cases.
+        #
+        # The population of the test cases is done in individual functions to
+        # give each set of test cases its own namespace in which to define
+        # its offsets (this way we don't have to worry about variable reuse
+        # causing problems if someone makes a typo).
+        #
+        # The decorator for calling is used to make it more obvious that each
+        # function is actually called (if it's not decorated, it's not called).
         def call(f):
-            f()
+            """Decorator to call the addition methods.
 
-        NORMAL = self.NORMAL
-        FOLD = self.FOLD
-        GAP = self.GAP
+            This will call a function which adds at least one new entry into
+            the `cases` dictionary. The decorator will also assert that
+            something was added to the dictionary.
+            """
+            prev_len = len(cases)
+            f()
+            assert len(cases) > prev_len, "Function did not add a test case!"
+
+        NORMAL = cls.NORMAL
+        FOLD = cls.FOLD
+        GAP = cls.GAP
+
+        cases = {}
 
         @call
         def _add():
@@ -529,8 +551,7 @@ class TZStrTest(unittest.TestCase):
                 (datetime(2020, 12, 31, 23, 59, 59, 999999), AAA, NORMAL),
             )
 
-        self.cases = cases
-        return self.cases
+        cls.test_cases = cases
 
 
 class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
