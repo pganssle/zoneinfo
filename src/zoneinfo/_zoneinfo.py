@@ -606,12 +606,8 @@ class _DayOffset:
     __slots__ = ["d", "julian", "hour", "minute", "second"]
 
     def __init__(self, d, julian, hour=2, minute=0, second=0):
-        if not 0 <= d <= 365:
-            if julian:
-                min_day = 1
-                d += 1
-            else:
-                min_day = 0
+        if not (0 + julian) <= d <= 365:
+            min_day = 0 + julian
             raise ValueError(f"d must be in [{min_day}, 365], not: {d}")
 
         self.d = d
@@ -653,8 +649,8 @@ class _CalendarOffset:
     )
 
     def __init__(self, m, w, d, hour=2, minute=0, second=0):
-        # if not 0 <= m <= 12:
-        #     raise ValueError("m must be in [0, 12]")
+        if not 0 < m <= 12:
+            raise ValueError("m must be in (0, 12]")
 
         if not 0 < w <= 5:
             raise ValueError("w must be in (0, 5]")
@@ -754,25 +750,34 @@ def _parse_tz_str(tz_str):
         dst_abbr = dst_abbr.strip("<>")
 
     if std_offset := m.group("stdoff"):
-        std_offset = _parse_tz_delta(std_offset)
+        try:
+            std_offset = _parse_tz_delta(std_offset)
+        except ValueError as e:
+            raise ValueError(f"Invalid STD offset in {tz_str}") from e
     else:
         std_offset = 0
 
     if dst_abbr is not None:
         if dst_offset := m.group("dstoff"):
-            dst_offset = _parse_tz_delta(dst_offset)
+            try:
+                dst_offset = _parse_tz_delta(dst_offset)
+            except ValueError as e:
+                raise ValueError(f"Invalid DST offset in {tz_str}") from e
         else:
             dst_offset = std_offset + 3600
 
         if not start_end_str:
-            raise ValueError("Missing transition rules")
+            raise ValueError(f"Missing transition rules: {tz_str}")
 
         start_end_strs = start_end_str[0].split(",", 1)
-        start, end = (_parse_dst_start_end(x) for x in start_end_strs)
+        try:
+            start, end = (_parse_dst_start_end(x) for x in start_end_strs)
+        except ValueError as e:
+            raise ValueError(f"Invalid TZ string: {tz_str}") from e
 
         return _TZStr(std_abbr, std_offset, dst_abbr, dst_offset, start, end)
     elif start_end_str:
-        raise ValueError("Transition rule present without DST")
+        raise ValueError(f"Transition rule present without DST: {tz_str}")
     else:
         # This is a static ttinfo, don't return _TZStr
         return _ttinfo(
@@ -814,14 +819,21 @@ def _parse_tz_delta(tz_delta):
         r"(?P<sign>[+-])?(?P<h>\d{1,2})(:(?P<m>\d{2})(:(?P<s>\d{2}))?)?",
         tz_delta,
     )
-    if match is None:
-        raise ValueError(f"{tz_delta} is not a valid offset")
+    # Anything passed to this function should already have hit an equivalent
+    # regular expression to find the section to parse.
+    assert match is not None, tz_delta
 
     h, m, s = (
         int(v) if v is not None else 0
         for v in map(match.group, ("h", "m", "s"))
     )
+
     total = h * 3600 + m * 60 + s
+
+    if not -86400 < total < 86400:
+        raise ValueError(
+            "Offset must be strictly between -24h and +24h:" + tz_delta
+        )
 
     # Yes, +5 maps to an offset of -5h
     if match.group("sign") != "-":

@@ -8,6 +8,7 @@ import io
 import json
 import lzma
 import pathlib
+import re
 import shutil
 import struct
 import tempfile
@@ -339,6 +340,50 @@ class TZStrTest(unittest.TestCase):
                 dt_act = dt_exp.astimezone(timezone.utc)
 
                 self.assertEqual(dt_act, dt_utc)
+
+    def test_invalid_tzstr(self):
+        invalid_tzstrs = [
+            "PST8PDT",  # DST but no transition specified
+            "+11",  # Unquoted alphanumeric
+            "GMT,M3.2.0/2,M11.1.0/3",  # Transition rule but no DST
+            # Invalid offsets
+            "STD+25",
+            "STD-25",
+            "STD+374",
+            "STD+374DST,M3.2.0/2,M11.1.0/3",
+            "STD+23DST+25,M3.2.0/2,M11.1.0/3",
+            "STD-23DST-25,M3.2.0/2,M11.1.0/3",
+            # Completely invalid dates
+            "AAA4BBB,M1443339,M11.1.0/3",
+            "AAA4BBB,M3.2.0/2,0349309483959c",
+            # Invalid months
+            "AAA4BBB,M13.1.1/2,M1.1.1/2",
+            "AAA4BBB,M1.1.1/2,M13.1.1/2",
+            "AAA4BBB,M0.1.1/2,M1.1.1/2",
+            "AAA4BBB,M1.1.1/2,M0.1.1/2",
+            # Invalid weeks
+            "AAA4BBB,M1.6.1/2,M1.1.1/2",
+            "AAA4BBB,M1.1.1/2,M1.6.1/2",
+            # Invalid weekday
+            "AAA4BBB,M1.1.7/2,M2.1.1/2",
+            "AAA4BBB,M1.1.1/2,M2.1.7/2",
+            # Invalid numeric offset
+            "AAA4BBB,-1/2,20/2",
+            "AAA4BBB,1/2,-1/2",
+            "AAA4BBB,367,20/2",
+            "AAA4BBB,1/2,367/2",
+            # Invalid julian offset
+            "AAA4BBB,J0/2,J20/2",
+            "AAA4BBB,J20/2,J366/2",
+        ]
+
+        for invalid_tzstr in invalid_tzstrs:
+            with self.subTest(tzstr=invalid_tzstr):
+                # Not necessarily a guaranteed property, but we should show
+                # the problematic TZ string if that's the cause of failure.
+                tzstr_regex = re.escape(invalid_tzstr)
+                with self.assertRaisesRegex(ValueError, tzstr_regex):
+                    self._zone_from_tzstr(invalid_tzstr)
 
     @classmethod
     def _populate_test_cases(cls):
