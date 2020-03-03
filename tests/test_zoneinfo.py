@@ -183,6 +183,10 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
                 elif zt.gap:
                     test_group = tests["gaps"]
                 else:
+                    # Assign a random variable here to disable the peephole
+                    # optimizer so that coverage can see this line.
+                    # See bpo-2506 for more information.
+                    no_peephole_opt = None
                     continue
 
                 # Cases are of the form key, dt, fold, offset
