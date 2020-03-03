@@ -10,8 +10,10 @@ jobs:
       matrix:
         python-version: [3.8]
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        tzdata_extras: ["", "tzdata"]
     env:
       TOXENV: py
+      TEST_EXTRAS_TOX: ${{ matrix.tzdata_extras }}
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     steps:
