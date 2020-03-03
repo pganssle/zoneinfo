@@ -258,6 +258,10 @@ class TZDataTests(ZoneInfoTest):
 
 
 class TZStrTest(unittest.TestCase):
+    NORMAL = 0
+    FOLD = 1
+    GAP = 2
+
     def _zone_from_tzstr(self, tzstr):
         """Creates a zoneinfo file following a POSIX rule."""
         zonefile = io.BytesIO()
@@ -289,167 +293,190 @@ class TZStrTest(unittest.TestCase):
 
         return ZoneInfo.from_file(zonefile, key=tzstr)
 
-    def test_m_spec_fromutc(self):
-        UTC = timezone.utc
-        test_cases = [
-            (
-                "EST5EDT,M3.2.0/4:00,M11.1.0/3:00",
-                [
-                    # fmt: off
-                    (datetime(2019, 3, 9, 17), datetime(2019, 3, 9, 12)),
-                    (datetime(2019, 3, 10, 8, 59), datetime(2019, 3, 10, 3, 59)),
-                    (datetime(2019, 3, 10, 9, 0), datetime(2019, 3, 10, 5)),
-                    (datetime(2019, 11, 2, 16, 0), datetime(2019, 11, 2, 12)),
-                    (datetime(2019, 11, 3, 5, 59), datetime(2019, 11, 3, 1, 59)),
-                    (datetime(2019, 11, 3, 6, 0), datetime(2019, 11, 3, 2)),
-                    (datetime(2019, 11, 3, 7, 0), datetime(2019, 11, 3, 2, fold=1)),
-                    (datetime(2019, 11, 3, 8, 0), datetime(2019, 11, 3, 3)),
-                    # fmt: on
-                ],
-            ),
-            # TODO: England, Australia, Dublin
-        ]
+    def test_tzstr_localized(self):
+        i = 0
+        for tzstr, cases in self.test_cases().items():
+            with self.subTest(tzstr=tzstr):
+                zi = self._zone_from_tzstr(tzstr)
 
-        for tzstr, test_values in test_cases:
-            tzi = self._zone_from_tzstr(tzstr)
-            for dt_utc_naive, dt_local_naive in test_values:
-                # Test conversion UTC -> TZ
-                with self.subTest(
-                    tzstr=tzstr, utc=dt_utc_naive, exp=dt_local_naive
-                ):
-                    dt_utc = dt_utc_naive.replace(tzinfo=UTC)
-                    dt_actual = dt_utc.astimezone(tzi)
-                    dt_actual_naive = dt_actual.replace(tzinfo=None)
+            for dt_naive, offset, _ in cases:
+                dt = dt_naive.replace(tzinfo=zi)
 
-                    self.assertEqual(dt_actual_naive, dt_local_naive)
-                    self.assertEqual(dt_actual.fold, dt_local_naive.fold)
+                with self.subTest(tzstr=tzstr, dt=dt, offset=offset):
+                    self.assertEqual(dt.tzname(), offset.tzname)
+                    self.assertEqual(dt.utcoffset(), offset.utcoffset)
+                    self.assertEqual(dt.dst(), offset.dst)
 
-                # Test conversion TZ -> UTC
-                with self.subTest(
-                    tzstr=tzstr, local=dt_local_naive, utc=dt_utc_naive
-                ):
-                    dt_local = dt_local_naive.replace(tzinfo=tzi)
-                    utc_expected = dt_utc_naive.replace(tzinfo=UTC)
-                    utc_actual = dt_local.astimezone(UTC)
+    def test_tzstr_from_utc(self):
+        for tzstr, cases in self.test_cases().items():
+            with self.subTest(tzstr=tzstr):
+                zi = self._zone_from_tzstr(tzstr)
 
-                    self.assertEqual(utc_actual, utc_expected)
+            for dt_naive, offset, dt_type in cases:
+                if dt_type == self.GAP:
+                    continue  # Cannot create a gap from UTC
 
-    def test_m_spec_localized(self):
-        """Tests that the Mm.n.d specification works"""
-        # Test cases are a list of entries, where each entry is:
-        # (tzstr, [(datetime, tzname, offset), ...])
+                dt_utc = (dt_naive - offset.utcoffset).replace(
+                    tzinfo=timezone.utc
+                )
 
-        # TODO: Replace with tzstr + transitions?
-        test_cases = [
+                # Check that we can go UTC -> Our zone
+                dt_act = dt_utc.astimezone(zi)
+                dt_exp = dt_naive.replace(tzinfo=zi)
+
+                self.assertEqual(dt_act, dt_exp)
+
+                if dt_type == self.FOLD:
+                    self.assertEqual(dt_act.fold, dt_naive.fold, dt_naive)
+                else:
+                    self.assertEqual(dt_act.fold, 0)
+
+                # Now check that we can go our zone -> UTC
+                dt_act = dt_exp.astimezone(timezone.utc)
+
+                self.assertEqual(dt_act, dt_utc)
+
+    def test_cases(self):
+        cases = getattr(self, "cases", {})
+        if cases:
+            return cases
+
+        def call(f):
+            f()
+
+        NORMAL = self.NORMAL
+        FOLD = self.FOLD
+        GAP = self.GAP
+
+        @call
+        def _add():
             # Transition to EDT on the 2nd Sunday in March at 4 AM, and
             # transition back on the first Sunday in November at 3AM
-            (
-                "EST5EDT,M3.2.0/4:00,M11.1.0/3:00",
-                [
-                    # fmt: off
-                    (datetime(2019, 3, 9), "EST", timedelta(hours=-5)),
-                    (datetime(2019, 3, 10, 3, 59), "EST", timedelta(hours=-5)),
-                    (datetime(2019, 3, 10, 4, 0, fold=0), "EST", timedelta(hours=-5)),
-                    (datetime(2019, 3, 10, 4, 0, fold=1), "EDT", timedelta(hours=-4)),
-                    (datetime(2019, 3, 10, 4, 1, fold=0), "EST", timedelta(hours=-5)),
-                    (datetime(2019, 3, 10, 4, 1, fold=1), "EDT", timedelta(hours=-4)),
-                    (datetime(2019, 11, 2), "EDT", timedelta(hours=-4)),
-                    (datetime(2019, 11, 3, 1, 59, fold=1), "EDT", timedelta(hours=-4)),
-                    (datetime(2019, 11, 3, 2, 0, fold=0), "EDT", timedelta(hours=-4)),
-                    (datetime(2019, 11, 3, 2, 0, fold=1), "EST", timedelta(hours=-5)),
-                    (datetime(2020, 3, 8, 3, 59), "EST", timedelta(hours=-5)),
-                    (datetime(2020, 3, 8, 4, 0, fold=0), "EST", timedelta(hours=-5)),
-                    (datetime(2020, 3, 8, 4, 0, fold=1), "EDT", timedelta(hours=-4)),
-                    (datetime(2020, 11, 1, 1, 59, fold=1), "EDT", timedelta(hours=-4)),
-                    (datetime(2020, 11, 1, 2, 0, fold=0), "EDT", timedelta(hours=-4)),
-                    (datetime(2020, 11, 1, 2, 0, fold=1), "EST", timedelta(hours=-5)),
-                    # fmt: on
-                ],
-            ),
+            tzstr = "EST5EDT,M3.2.0/4:00,M11.1.0/3:00"
+
+            EST = ZoneOffset("EST", timedelta(hours=-5), ZERO)
+            EDT = ZoneOffset("EDT", timedelta(hours=-4), ONE_H)
+
+            cases[tzstr] = (
+                (datetime(2019, 3, 9), EST, NORMAL),
+                (datetime(2019, 3, 10, 3, 59), EST, NORMAL),
+                (datetime(2019, 3, 10, 4, 0, fold=0), EST, GAP),
+                (datetime(2019, 3, 10, 4, 0, fold=1), EDT, GAP),
+                (datetime(2019, 3, 10, 4, 1, fold=0), EST, GAP),
+                (datetime(2019, 3, 10, 4, 1, fold=1), EDT, GAP),
+                (datetime(2019, 11, 2), EDT, NORMAL),
+                (datetime(2019, 11, 3, 1, 59, fold=1), EDT, NORMAL),
+                (datetime(2019, 11, 3, 2, 0, fold=0), EDT, FOLD),
+                (datetime(2019, 11, 3, 2, 0, fold=1), EST, FOLD),
+                (datetime(2020, 3, 8, 3, 59), EST, NORMAL),
+                (datetime(2020, 3, 8, 4, 0, fold=0), EST, GAP),
+                (datetime(2020, 3, 8, 4, 0, fold=1), EDT, GAP),
+                (datetime(2020, 11, 1, 1, 59, fold=1), EDT, NORMAL),
+                (datetime(2020, 11, 1, 2, 0, fold=0), EDT, FOLD),
+                (datetime(2020, 11, 1, 2, 0, fold=1), EST, FOLD),
+            )
+
+        @call
+        def _add():
             # Transition to BST happens on the last Sunday in March at 1 AM GMT
             # and the transition back happens the last Sunday in October at 2AM BST
-            (
-                "GMT0BST-1,M3.5.0/1:00,M10.5.0/2:00",
-                [
-                    # fmt: off
-                    (datetime(2019, 3, 30), "GMT", timedelta(hours=0)),
-                    (datetime(2019, 3, 31, 0, 59), "GMT", timedelta(hours=0)),
-                    (datetime(2019, 3, 31, 2, 0), "BST", timedelta(hours=1)),
-                    (datetime(2019, 10, 26), "BST", timedelta(hours=1)),
-                    (datetime(2019, 10, 27, 0, 59, fold=1), "BST", timedelta(hours=1)),
-                    (datetime(2019, 10, 27, 1, 0, fold=0), "BST", timedelta(hours=1)),
-                    (datetime(2019, 10, 27, 2, 0, fold=1), "GMT", timedelta(hours=0)),
-                    (datetime(2020, 3, 29, 0, 59), "GMT", timedelta(hours=0)),
-                    (datetime(2020, 3, 29, 2, 0), "BST", timedelta(hours=1)),
-                    (datetime(2020, 10, 25, 0, 59, fold=1), "BST", timedelta(hours=1)),
-                    (datetime(2020, 10, 25, 1, 0, fold=0), "BST", timedelta(hours=1)),
-                    (datetime(2020, 10, 25, 2, 0, fold=1), "GMT", timedelta(hours=0)),
-                    # fmt: on
-                ],
-            ),
+            tzstr = "GMT0BST-1,M3.5.0/1:00,M10.5.0/2:00"
+
+            GMT = ZoneOffset("GMT", ZERO, ZERO)
+            BST = ZoneOffset("BST", ONE_H, ONE_H)
+
+            cases[tzstr] = (
+                (datetime(2019, 3, 30), GMT, NORMAL),
+                (datetime(2019, 3, 31, 0, 59), GMT, NORMAL),
+                (datetime(2019, 3, 31, 2, 0), BST, NORMAL),
+                (datetime(2019, 10, 26), BST, NORMAL),
+                (datetime(2019, 10, 27, 0, 59, fold=1), BST, NORMAL),
+                (datetime(2019, 10, 27, 1, 0, fold=0), BST, GAP),
+                (datetime(2019, 10, 27, 2, 0, fold=1), GMT, GAP),
+                (datetime(2020, 3, 29, 0, 59), GMT, NORMAL),
+                (datetime(2020, 3, 29, 2, 0), BST, NORMAL),
+                (datetime(2020, 10, 25, 0, 59, fold=1), BST, NORMAL),
+                (datetime(2020, 10, 25, 1, 0, fold=0), BST, FOLD),
+                (datetime(2020, 10, 25, 2, 0, fold=1), GMT, NORMAL),
+            )
+
+        @call
+        def _add():
             # Austrialian time zone - DST start is chronologically first
-            (
-                "AEST-10AEDT,M10.1.0/2,M4.1.0/3",
-                [
-                    # fmt: off
-                    (datetime(2019, 4, 6), "AEDT", timedelta(hours=11)),
-                    (datetime(2019, 4, 7, 1, 59), "AEDT", timedelta(hours=11)),
-                    (datetime(2019, 4, 7, 1, 59, fold=1), "AEDT", timedelta(hours=11)),
-                    (datetime(2019, 4, 7, 2, 0, fold=0), "AEDT", timedelta(hours=11)),
-                    (datetime(2019, 4, 7, 2, 1, fold=0), "AEDT", timedelta(hours=11)),
-                    (datetime(2019, 4, 7, 2, 0, fold=1), "AEST", timedelta(hours=10)),
-                    (datetime(2019, 4, 7, 2, 1, fold=1), "AEST", timedelta(hours=10)),
-                    (datetime(2019, 4, 7, 3, 0, fold=0), "AEST", timedelta(hours=10)),
-                    (datetime(2019, 4, 7, 3, 0, fold=1), "AEST", timedelta(hours=10)),
-                    (datetime(2019, 10, 5, 0), "AEST", timedelta(hours=10)),
-                    (datetime(2019, 10, 6, 1, 59), "AEST", timedelta(hours=10)),
-                    (datetime(2019, 10, 6, 2, 0, fold=0), "AEST", timedelta(hours=10)),
-                    (datetime(2019, 10, 6, 2, 0, fold=1), "AEDT", timedelta(hours=11)),
-                    (datetime(2019, 10, 6, 3, 0), "AEDT", timedelta(hours=11)),
-                    # fmt: on
-                ],
-            ),
-            (
-                "IST-1GMT0,M10.5.0,M3.5.0/1",
-                [
-                    # fmt: off
-                    (datetime(2019, 3, 30), "GMT", timedelta(hours=0)),
-                    (datetime(2019, 3, 31, 0, 59), "GMT", timedelta(hours=0)),
-                    (datetime(2019, 3, 31, 2, 0), "IST", timedelta(hours=1)),
-                    (datetime(2019, 10, 26), "IST", timedelta(hours=1)),
-                    (datetime(2019, 10, 27, 0, 59, fold=1), "IST", timedelta(hours=1)),
-                    (datetime(2019, 10, 27, 1, 0, fold=0), "IST", timedelta(hours=1)),
-                    (datetime(2019, 10, 27, 2, 0, fold=1), "GMT", timedelta(hours=0)),
-                    (datetime(2020, 3, 29, 0, 59), "GMT", timedelta(hours=0)),
-                    (datetime(2020, 3, 29, 2, 0), "IST", timedelta(hours=1)),
-                    (datetime(2020, 10, 25, 0, 59, fold=1), "IST", timedelta(hours=1)),
-                    (datetime(2020, 10, 25, 1, 0, fold=0), "IST", timedelta(hours=1)),
-                    (datetime(2020, 10, 25, 2, 0, fold=1), "GMT", timedelta(hours=0)),
-                    # fmt: on
-                ],
-            ),
-            (
-                "<+11>-11",  # Pacific/Kosrae
-                [(datetime(2020, 1, 1), "+11", timedelta(hours=11)),],
-            ),
-            (
-                "<-04>4<-03>,M9.1.6/24,M4.1.6/24",
-                [
-                    (datetime(2020, 5, 1), "-04", timedelta(hours=-4)),
-                    (datetime(2020, 11, 1), "-03", timedelta(hours=-3)),
-                ],
-            ),
-        ]
+            tzstr = "AEST-10AEDT,M10.1.0/2,M4.1.0/3"
 
-        for tzstr, test_values in test_cases:
-            tzi = self._zone_from_tzstr(tzstr)
-            self.assertEqual(str(tzi), tzstr)
+            AEST = ZoneOffset("AEST", timedelta(hours=10), ZERO)
+            AEDT = ZoneOffset("AEDT", timedelta(hours=11), ONE_H)
 
-            for dt_naive, expected_tzname, expected_tzoffset in test_values:
-                dt = dt_naive.replace(tzinfo=tzi)
-                with self.subTest(tzstr=tzstr, dt=dt):
-                    self.assertEqual(dt.tzname(), expected_tzname)
-                    self.assertEqual(dt.utcoffset(), expected_tzoffset)
+            cases[tzstr] = (
+                (datetime(2019, 4, 6), AEDT, NORMAL),
+                (datetime(2019, 4, 7, 1, 59), AEDT, NORMAL),
+                (datetime(2019, 4, 7, 1, 59, fold=1), AEDT, NORMAL),
+                (datetime(2019, 4, 7, 2, 0, fold=0), AEDT, FOLD),
+                (datetime(2019, 4, 7, 2, 1, fold=0), AEDT, FOLD),
+                (datetime(2019, 4, 7, 2, 0, fold=1), AEST, FOLD),
+                (datetime(2019, 4, 7, 2, 1, fold=1), AEST, FOLD),
+                (datetime(2019, 4, 7, 3, 0, fold=0), AEST, NORMAL),
+                (datetime(2019, 4, 7, 3, 0, fold=1), AEST, NORMAL),
+                (datetime(2019, 10, 5, 0), AEST, NORMAL),
+                (datetime(2019, 10, 6, 1, 59), AEST, NORMAL),
+                (datetime(2019, 10, 6, 2, 0, fold=0), AEST, GAP),
+                (datetime(2019, 10, 6, 2, 0, fold=1), AEDT, GAP),
+                (datetime(2019, 10, 6, 3, 0), AEDT, NORMAL),
+            )
+
+        @call
+        def _add():
+            # Irish time zone - negative DST
+            tzstr = "IST-1GMT0,M10.5.0,M3.5.0/1"
+
+            GMT = ZoneOffset("GMT", ZERO, -ONE_H)
+            IST = ZoneOffset("IST", ONE_H, ZERO)
+
+            cases[tzstr] = (
+                (datetime(2019, 3, 30), GMT, NORMAL),
+                (datetime(2019, 3, 31, 0, 59), GMT, NORMAL),
+                (datetime(2019, 3, 31, 2, 0), IST, NORMAL),
+                (datetime(2019, 10, 26), IST, NORMAL),
+                (datetime(2019, 10, 27, 0, 59, fold=1), IST, NORMAL),
+                (datetime(2019, 10, 27, 1, 0, fold=0), IST, FOLD),
+                (datetime(2019, 10, 27, 1, 0, fold=1), GMT, FOLD),
+                (datetime(2019, 10, 27, 2, 0, fold=1), GMT, NORMAL),
+                (datetime(2020, 3, 29, 0, 59), GMT, NORMAL),
+                (datetime(2020, 3, 29, 2, 0), IST, NORMAL),
+                (datetime(2020, 10, 25, 0, 59, fold=1), IST, NORMAL),
+                (datetime(2020, 10, 25, 1, 0, fold=0), IST, FOLD),
+                (datetime(2020, 10, 25, 2, 0, fold=1), GMT, NORMAL),
+            )
+
+        @call
+        def _add():
+            # Pacific/Kosrae: Fixed offset zone with a quoted numerical tzname
+            tzstr = "<+11>-11"
+
+            cases[tzstr] = (
+                (
+                    datetime(2020, 1, 1),
+                    ZoneOffset("+11", timedelta(hours=11)),
+                    NORMAL,
+                ),
+            )
+
+        @call
+        def _add():
+            # Quoted STD and DST, transitions at 24:00
+            tzstr = "<-04>4<-03>,M9.1.6/24,M4.1.6/24"
+
+            M04 = ZoneOffset("-04", timedelta(hours=-4))
+            M03 = ZoneOffset("-03", timedelta(hours=-3), ONE_H)
+
+            cases[tzstr] = (
+                (datetime(2020, 5, 1), M04, NORMAL),
+                (datetime(2020, 11, 1), M03, NORMAL),
+            )
+
+        self.cases = cases
+        return self.cases
 
 
 class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
