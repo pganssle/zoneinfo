@@ -73,7 +73,7 @@ class TzPathUserMixin:
     """
 
     @property
-    def tzpath(self):
+    def tzpath(self):  # pragma: nocover
         return None
 
     def setUp(self):
