@@ -746,6 +746,24 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
         with self.subTest(test="Not a cached object"):
             self.assertIsNot(zi_rt, zi_cache)
 
+    def test_from_file(self):
+        key = "Europe/Dublin"
+        with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
+            zi_nokey = ZoneInfo.from_file(f)
+
+            f.seek(0)
+            zi_key = ZoneInfo.from_file(f, key=key)
+
+        test_cases = [
+            (zi_key, "ZoneInfo with key"),
+            (zi_nokey, "ZoneInfo without key"),
+        ]
+
+        for zi, test_name in test_cases:
+            with self.subTest(test_name=test_name):
+                with self.assertRaises(pickle.PicklingError):
+                    pickle.dumps(zi)
+
 
 @dataclasses.dataclass
 class ZoneOffset:

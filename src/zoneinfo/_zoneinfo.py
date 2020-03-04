@@ -110,6 +110,9 @@ class ZoneInfo(tzinfo):
         obj._load_file(fobj)
         obj._file_repr = repr(fobj)
 
+        # Disable pickling for objects created from files
+        obj.__reduce__ = obj._file_reduce
+
         return obj
 
     @classmethod
@@ -228,6 +231,13 @@ class ZoneInfo(tzinfo):
 
     def __reduce__(self):
         return (self.__class__._unpickle, (self._key, self._from_cache))
+
+    def _file_reduce(self):
+        import pickle
+
+        raise pickle.PicklingError(
+            "Cannot pickle a ZoneInfo file created from a file stream."
+        )
 
     @classmethod
     def _unpickle(cls, key, from_cache, /):
