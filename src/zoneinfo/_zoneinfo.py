@@ -70,7 +70,8 @@ class ZoneInfo(tzinfo):
     def __new__(cls, key):
         instance = cls.__weak_cache.get(key, None)
         if instance is None:
-            instance = cls.__weak_cache.setdefault(key, cls.nocache(key))
+            instance = cls.__weak_cache.setdefault(key, cls._new_instance(key))
+            instance._from_cache = True
 
         # Update the "strong" cache
         cls.__strong_cache[key] = cls.__strong_cache.pop(key, instance)
@@ -82,6 +83,13 @@ class ZoneInfo(tzinfo):
 
     @classmethod
     def nocache(cls, key):
+        obj = cls._new_instance(key)
+        obj._from_cache = False
+
+        return obj
+
+    @classmethod
+    def _new_instance(cls, key):
         obj = super().__new__(cls)
         obj._key = key
         obj._file_path = obj._find_tzfile(key)
@@ -217,6 +225,16 @@ class ZoneInfo(tzinfo):
             return f"{self.__class__.__name__}(key={self._key!r})"
         else:
             return f"{self.__class__.__name__}.from_file({self._file_repr})"
+
+    def __reduce__(self):
+        return (self.__class__._unpickle, (self._key, self._from_cache))
+
+    @classmethod
+    def _unpickle(cls, key, from_cache, /):
+        if from_cache:
+            return cls(key)
+        else:
+            return cls.nocache(key)
 
     def _find_tzfile(self, key):
         for search_path in TZPATH:
