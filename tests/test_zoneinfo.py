@@ -8,6 +8,7 @@ import io
 import json
 import lzma
 import pathlib
+import pickle
 import re
 import shutil
 import struct
@@ -694,6 +695,56 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
         self.assertIsNot(la0, la1)
         self.assertIsNot(dub0, dub1)
         self.assertIs(tok0, tok1)
+
+
+class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
+    def setUp(self):
+        ZoneInfo.clear_cache()
+        super().setUp()
+
+    @property
+    def tzpath(self):
+        return [ZONEINFO_DATA.tzpath]
+
+    def test_cache_hit(self):
+        zi_in = ZoneInfo("Europe/Dublin")
+        pkl = pickle.dumps(zi_in)
+        zi_rt = pickle.loads(pkl)
+
+        with self.subTest(test="Is non-pickled ZoneInfo"):
+            self.assertIs(zi_in, zi_rt)
+
+        zi_rt2 = pickle.loads(pkl)
+        with self.subTest(test="Is unpickled ZoneInfo"):
+            self.assertIs(zi_rt, zi_rt2)
+
+    def test_cache_miss(self):
+        zi_in = ZoneInfo("Europe/Dublin")
+        pkl = pickle.dumps(zi_in)
+
+        del zi_in
+        ZoneInfo.clear_cache()  # Induce a cache miss
+        zi_rt = pickle.loads(pkl)
+        zi_rt2 = pickle.loads(pkl)
+
+        self.assertIs(zi_rt, zi_rt2)
+
+    def test_nocache(self):
+        zi_nocache = ZoneInfo.nocache("Europe/Dublin")
+
+        pkl = pickle.dumps(zi_nocache)
+        zi_rt = pickle.loads(pkl)
+
+        with self.subTest(test="Not the pickled object"):
+            self.assertIsNot(zi_rt, zi_nocache)
+
+        zi_rt2 = pickle.loads(pkl)
+        with self.subTest(test="Not a second unpickled object"):
+            self.assertIsNot(zi_rt, zi_rt2)
+
+        zi_cache = ZoneInfo("Europe/Dublin")
+        with self.subTest(test="Not a cached object"):
+            self.assertIsNot(zi_rt, zi_cache)
 
 
 @dataclasses.dataclass
