@@ -764,6 +764,32 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
                 with self.assertRaises(pickle.PicklingError):
                     pickle.dumps(zi)
 
+    def test_pickle_after_from_file(self):
+        # This may be a bit of paranoia, but this test is to ensure that no
+        # global state is maintained in order to handle the pickle cache and
+        # from_file behavior, and that it is possible to interweave the
+        # constructors of each of these and pickling/unpickling without issues.
+        key = "Europe/Dublin"
+        zi = ZoneInfo(key)
+
+        pkl_0 = pickle.dumps(zi)
+        zi_rt_0 = pickle.loads(pkl_0)
+        self.assertIs(zi, zi_rt_0)
+
+        with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
+            zi_ff = ZoneInfo.from_file(f, key=key)
+
+        pkl_1 = pickle.dumps(zi)
+        zi_rt_1 = pickle.loads(pkl_1)
+        self.assertIs(zi, zi_rt_1)
+
+        with self.assertRaises(pickle.PicklingError):
+            pickle.dumps(zi_ff)
+
+        pkl_2 = pickle.dumps(zi)
+        zi_rt_2 = pickle.loads(pkl_2)
+        self.assertIs(zi, zi_rt_2)
+
 
 @dataclasses.dataclass
 class ZoneOffset:
