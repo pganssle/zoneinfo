@@ -8,6 +8,7 @@ import io
 import json
 import lzma
 import pathlib
+import pickle
 import re
 import shutil
 import struct
@@ -694,6 +695,100 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
         self.assertIsNot(la0, la1)
         self.assertIsNot(dub0, dub1)
         self.assertIs(tok0, tok1)
+
+
+class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
+    def setUp(self):
+        ZoneInfo.clear_cache()
+        super().setUp()
+
+    @property
+    def tzpath(self):
+        return [ZONEINFO_DATA.tzpath]
+
+    def test_cache_hit(self):
+        zi_in = ZoneInfo("Europe/Dublin")
+        pkl = pickle.dumps(zi_in)
+        zi_rt = pickle.loads(pkl)
+
+        with self.subTest(test="Is non-pickled ZoneInfo"):
+            self.assertIs(zi_in, zi_rt)
+
+        zi_rt2 = pickle.loads(pkl)
+        with self.subTest(test="Is unpickled ZoneInfo"):
+            self.assertIs(zi_rt, zi_rt2)
+
+    def test_cache_miss(self):
+        zi_in = ZoneInfo("Europe/Dublin")
+        pkl = pickle.dumps(zi_in)
+
+        del zi_in
+        ZoneInfo.clear_cache()  # Induce a cache miss
+        zi_rt = pickle.loads(pkl)
+        zi_rt2 = pickle.loads(pkl)
+
+        self.assertIs(zi_rt, zi_rt2)
+
+    def test_nocache(self):
+        zi_nocache = ZoneInfo.nocache("Europe/Dublin")
+
+        pkl = pickle.dumps(zi_nocache)
+        zi_rt = pickle.loads(pkl)
+
+        with self.subTest(test="Not the pickled object"):
+            self.assertIsNot(zi_rt, zi_nocache)
+
+        zi_rt2 = pickle.loads(pkl)
+        with self.subTest(test="Not a second unpickled object"):
+            self.assertIsNot(zi_rt, zi_rt2)
+
+        zi_cache = ZoneInfo("Europe/Dublin")
+        with self.subTest(test="Not a cached object"):
+            self.assertIsNot(zi_rt, zi_cache)
+
+    def test_from_file(self):
+        key = "Europe/Dublin"
+        with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
+            zi_nokey = ZoneInfo.from_file(f)
+
+            f.seek(0)
+            zi_key = ZoneInfo.from_file(f, key=key)
+
+        test_cases = [
+            (zi_key, "ZoneInfo with key"),
+            (zi_nokey, "ZoneInfo without key"),
+        ]
+
+        for zi, test_name in test_cases:
+            with self.subTest(test_name=test_name):
+                with self.assertRaises(pickle.PicklingError):
+                    pickle.dumps(zi)
+
+    def test_pickle_after_from_file(self):
+        # This may be a bit of paranoia, but this test is to ensure that no
+        # global state is maintained in order to handle the pickle cache and
+        # from_file behavior, and that it is possible to interweave the
+        # constructors of each of these and pickling/unpickling without issues.
+        key = "Europe/Dublin"
+        zi = ZoneInfo(key)
+
+        pkl_0 = pickle.dumps(zi)
+        zi_rt_0 = pickle.loads(pkl_0)
+        self.assertIs(zi, zi_rt_0)
+
+        with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
+            zi_ff = ZoneInfo.from_file(f, key=key)
+
+        pkl_1 = pickle.dumps(zi)
+        zi_rt_1 = pickle.loads(pkl_1)
+        self.assertIs(zi, zi_rt_1)
+
+        with self.assertRaises(pickle.PicklingError):
+            pickle.dumps(zi_ff)
+
+        pkl_2 = pickle.dumps(zi)
+        zi_rt_2 = pickle.loads(pkl_2)
+        self.assertIs(zi, zi_rt_2)
 
 
 @dataclasses.dataclass
