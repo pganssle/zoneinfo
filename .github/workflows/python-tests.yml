@@ -37,10 +37,8 @@ jobs:
       matrix:
         python-version: [3.8]
         os: ["ubuntu-latest"]
-        compiler: ["gcc-9", "gcc"]
     env:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      CC: ${{ matrix.compiler }}
     steps:
       - uses: actions/checkout@v2
       - name: C coverage - ${{ matrix.os }}
@@ -49,21 +47,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
-          sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y
-          sudo apt-get -qq update
-          sudo apt-get install -y gcc-9
           python -m pip install --upgrade pip tox
       - name: Run tests
         run: |
           tox -e gcov,codecov
-      - name: Print diagnostic information
-        run: |
-          ${{ matrix.compiler }} --version
-          strings .tox/gcov/lib/python3.8/site-packages/zoneinfo/*.so | grep gcda
-          echo "Find gcda files"
-          find . -iname '*.gcda'
-          echo "Find gcno files"
-          find . -iname '*.gcno'
 
   other:
     runs-on: "ubuntu-latest"
