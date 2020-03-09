@@ -111,17 +111,21 @@ static PyTypeObject PyZoneInfo_ZoneInfoType = {
 };
 
 static PyMethodDef module_methods[] = {{NULL, NULL}};
+static void
+module_free()
+{
+    // Clear caches
+    Py_XDECREF(ZONEINFO_WEAK_CACHE);
+    ZONEINFO_WEAK_CACHE = NULL;
+}
 
 static struct PyModuleDef zoneinfomodule = {
     PyModuleDef_HEAD_INIT,
-    "zoneinfo._czoneinfo",
-    "C implementation of the zoneinfo module",
-    -1,
-    module_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL};
+    .m_name = "zoneinfo._czoneinfo",
+    .m_doc = "C implementation of the zoneinfo module",
+    .m_size = -1,
+    .m_methods = module_methods,
+    .m_free = (freefunc)module_free};
 
 PyMODINIT_FUNC
 PyInit__czoneinfo(void)
