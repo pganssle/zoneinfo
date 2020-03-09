@@ -9,6 +9,8 @@ import sys
 import weakref
 from datetime import datetime, timedelta, timezone, tzinfo
 
+from . import _tzpath
+
 EPOCH = datetime(1970, 1, 1)
 EPOCHORDINAL = datetime(1970, 1, 1).toordinal()
 
@@ -24,37 +26,6 @@ _DELTA_CACHE = {}
 
 def _load_timedelta(seconds):
     return _DELTA_CACHE.setdefault(seconds, timedelta(seconds=seconds))
-
-
-def set_tzpath(tzpaths=None):
-    global TZPATH
-    if tzpaths is not None:
-        if isinstance(tzpaths, (str, bytes)):
-            raise ValueError(
-                f"tzpaths must be a list or tuple, "
-                + f"not {type(tzpaths)}: {tzpaths}"
-            )
-        base_tzpath = tzpaths
-    else:
-        if "PYTHONTZPATH" in os.environ:
-            base_tzpath = os.environ["PYTHONTZPATH"].split(os.pathsep)
-        elif sys.platform != "win32":
-            base_tzpath = [
-                "/usr/share/zoneinfo",
-                "/usr/lib/zoneinfo",
-                "/usr/share/lib/zoneinfo",
-                "/etc/zoneinfo",
-            ]
-
-            base_tzpath.sort(key=lambda x: not os.path.exists(x))
-        else:
-            base_tzpath = []
-
-    TZPATH = tuple(base_tzpath)
-
-
-TZPATH = ()
-set_tzpath()
 
 
 class ZoneInfo(tzinfo):
@@ -242,12 +213,7 @@ class ZoneInfo(tzinfo):
             return cls.nocache(key)
 
     def _find_tzfile(self, key):
-        for search_path in TZPATH:
-            filepath = os.path.join(search_path, key)
-            if os.path.isfile(filepath):
-                return filepath
-
-        return None
+        return _tzpath.find_tzfile(key)
 
     def _load_file(self, fobj):
         # Retrieve all the data as it exists in the zoneinfo file

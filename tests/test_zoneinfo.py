@@ -58,7 +58,7 @@ def tearDownModule():
 def tzpath_context(tzpath, lock=TZPATH_LOCK):
     with lock:
         # TODO: Expose a public mechanism to get this information
-        old_path = zoneinfo._zoneinfo.TZPATH
+        old_path = zoneinfo._tzpath.TZPATH
         try:
             zoneinfo.set_tzpath(tzpath)
             yield
