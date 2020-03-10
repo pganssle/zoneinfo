@@ -189,6 +189,23 @@ zoneinfo_dealloc(PyObject *obj_self)
 }
 
 static PyObject *
+zoneinfo_nocache(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
+{
+    static char *kwlist[] = {"key", NULL};
+    PyObject *key = NULL;
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O", kwlist, &key)) {
+        return NULL;
+    }
+
+    PyObject *out = zoneinfo_new_instance(cls, key);
+    if (out != NULL) {
+        ((PyZoneInfo_ZoneInfo *)out)->from_cache = 0;
+    }
+
+    return out;
+}
+
+static PyObject *
 zoneinfo_clear_cache(PyObject *self)
 {
     PyObject_CallMethod(ZONEINFO_WEAK_CACHE, "clear", NULL);
@@ -677,6 +694,9 @@ ts_to_local(size_t *trans_idx, int64_t *trans_utc, long *utcoff,
 static PyMethodDef zoneinfo_methods[] = {
     {"clear_cache", (PyCFunction)zoneinfo_clear_cache,
      METH_NOARGS | METH_CLASS, PyDoc_STR("Clear the ZoneInfo cache.")},
+    {"nocache", (PyCFunction)zoneinfo_nocache,
+     METH_VARARGS | METH_KEYWORDS | METH_CLASS,
+     PyDoc_STR("Get a new instance of ZoneInfo, bypassing the cache.")},
     {NULL} /* Sentinel */
 };
 

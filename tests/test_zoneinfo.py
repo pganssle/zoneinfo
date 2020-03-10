@@ -1078,7 +1078,6 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
 class CZoneInfoCacheTest(ZoneInfoCacheTest):
     klass = c_zoneinfo.ZoneInfo
 
-    test_nocache = None
     test_clear_cache_one_key = None
     test_clear_cache_two_keys = None
 
