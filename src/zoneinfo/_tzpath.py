@@ -6,7 +6,7 @@ def set_tzpath(tzpaths=None):
     global TZPATH
     if tzpaths is not None:
         if isinstance(tzpaths, (str, bytes)):
-            raise ValueError(
+            raise TypeError(
                 f"tzpaths must be a list or tuple, "
                 + f"not {type(tzpaths)}: {tzpaths}"
             )

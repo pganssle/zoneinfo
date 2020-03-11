@@ -791,6 +791,20 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
         self.assertIs(zi, zi_rt_2)
 
 
+class TzPathTest(unittest.TestCase, TzPathUserMixin):
+    def test_tzpath_error(self):
+        bad_values = [
+            "/etc/zoneinfo:/usr/share/zoneinfo",
+            b"/etc/zoneinfo:/usr/share/zoneinfo",
+            0,
+        ]
+
+        for bad_value in bad_values:
+            with self.subTest(value=bad_value):
+                with self.assertRaises(TypeError):
+                    zoneinfo.set_tzpath(bad_value)
+
+
 @dataclasses.dataclass
 class ZoneOffset:
     tzname: str
