@@ -5,6 +5,12 @@ coverage:
         patch:
             default:
                 target: "100"
+                paths:
+                  - "tests/"
+                  - "src/"
         project:
             default:
                 target: "100"
+                paths:
+                  - "tests/"
+                  - "src/"
