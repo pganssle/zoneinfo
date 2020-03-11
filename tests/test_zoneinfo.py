@@ -57,8 +57,7 @@ def tearDownModule():
 @contextlib.contextmanager
 def tzpath_context(tzpath, lock=TZPATH_LOCK):
     with lock:
-        # TODO: Expose a public mechanism to get this information
-        old_path = zoneinfo._tzpath.TZPATH
+        old_path = zoneinfo.TZPATH
         try:
             zoneinfo.set_tzpath(tzpath)
             yield
@@ -792,6 +791,8 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
 
 
 class TzPathTest(unittest.TestCase, TzPathUserMixin):
+    module = zoneinfo
+
     def test_tzpath_error(self):
         bad_values = [
             "/etc/zoneinfo:/usr/share/zoneinfo",
@@ -802,7 +803,44 @@ class TzPathTest(unittest.TestCase, TzPathUserMixin):
         for bad_value in bad_values:
             with self.subTest(value=bad_value):
                 with self.assertRaises(TypeError):
-                    zoneinfo.set_tzpath(bad_value)
+                    self.module.set_tzpath(bad_value)
+
+    def test_tzpath_attribute(self):
+        tzpath_0 = ["/one", "/two"]
+        tzpath_1 = ["/three"]
+
+        with tzpath_context(tzpath_0):
+            query_0 = self.module.TZPATH
+
+        with tzpath_context(tzpath_1):
+            query_1 = self.module.TZPATH
+
+        self.assertSequenceEqual(tzpath_0, query_0)
+        self.assertSequenceEqual(tzpath_1, query_1)
+
+
+class TestModule(unittest.TestCase):
+    module = zoneinfo
+
+    def test_getattr_error(self):
+        with self.assertRaises(AttributeError):
+            self.module.NOATTRIBUTE
+
+    def test_dir_contains_all(self):
+        """dir(self.module) should at least contain everything in __all__."""
+        module_all_set = set(self.module.__all__)
+        module_dir_set = set(dir(self.module))
+
+        difference = module_all_set - module_dir_set
+
+        self.assertFalse(difference)
+
+    def test_dir_unique(self):
+        """Test that there are no duplicates in dir(self.module)"""
+        module_dir = dir(self.module)
+        module_unique = set(module_dir)
+
+        self.assertCountEqual(module_dir, module_unique)
 
 
 @dataclasses.dataclass
