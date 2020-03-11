@@ -50,11 +50,6 @@ def set_tzpath(tzpaths=None):
         else:
             base_tzpath = []
 
-        if "PYTHONTZPATH_APPEND" in os.environ:
-            base_tzpath.extend(
-                os.environ["PYTHONTZPATH_APPEND"].split(os.pathsep)
-            )
-
     TZPATH = tuple(base_tzpath)
 
 
