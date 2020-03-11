@@ -307,28 +307,29 @@ class TZStrTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._populate_test_cases()
+        cls.populate_tzstr_header()
 
-    def _zone_from_tzstr(self, tzstr):
+    @classmethod
+    def populate_tzstr_header(cls):
+        out = bytearray()
+        # The TZif format always starts with a Version 1 file followed by
+        # the Version 2+ file. In this case, we have no transitions, just
+        # the tzstr in the footer, so up to the footer, the files are
+        # identical and we can just write the same file twice in a row.
+        for i in range(2):
+            out += b"TZif"  # Magic value
+            out += b"3"  # Version
+            out += b" " * 15  # Reserved
+
+            # We will not write any of the manual transition parts
+            out += struct.pack(">6l", 0, 0, 0, 0, 0, 0)
+
+        cls._tzif_header = bytes(out)
+
+    def zone_from_tzstr(self, tzstr):
         """Creates a zoneinfo file following a POSIX rule."""
-        zonefile = io.BytesIO()
-        # Version 1 header
-        zonefile.write(b"TZif")  # Magic value
-        zonefile.write(b"3")  # Version
-        zonefile.write(b" " * 15)  # Reserved
-        # We will not write any of the manual transition parts
-        zonefile.write(struct.pack(">6l", 0, 0, 0, 0, 0, 0))
-
-        # Version 2+ header
-        zonefile.write(b"TZif")  # Magic value
-        zonefile.write(b"3")  # Version
-        zonefile.write(b" " * 15)  # Reserved
-        zonefile.write(struct.pack(">6l", 0, 0, 0, 1, 1, 4))
-
-        # Add an arbitrary offset to make things easier
-        zonefile.write(struct.pack(">1q", -(2 ** 32)))
-        zonefile.write(struct.pack(">1B", 0))
-        zonefile.write(struct.pack(">lbb", -17760, 0, 0))
-        zonefile.write(b"LMT\x00")
+        zonefile = io.BytesIO(self._tzif_header)
+        zonefile.seek(0, 2)
 
         # Write the footer
         zonefile.write(b"\x0A")
@@ -343,7 +344,7 @@ class TZStrTest(unittest.TestCase):
         i = 0
         for tzstr, cases in self.test_cases.items():
             with self.subTest(tzstr=tzstr):
-                zi = self._zone_from_tzstr(tzstr)
+                zi = self.zone_from_tzstr(tzstr)
 
             for dt_naive, offset, _ in cases:
                 dt = dt_naive.replace(tzinfo=zi)
@@ -356,7 +357,7 @@ class TZStrTest(unittest.TestCase):
     def test_tzstr_from_utc(self):
         for tzstr, cases in self.test_cases.items():
             with self.subTest(tzstr=tzstr):
-                zi = self._zone_from_tzstr(tzstr)
+                zi = self.zone_from_tzstr(tzstr)
 
             for dt_naive, offset, dt_type in cases:
                 if dt_type == self.GAP:
@@ -424,7 +425,7 @@ class TZStrTest(unittest.TestCase):
                 # the problematic TZ string if that's the cause of failure.
                 tzstr_regex = re.escape(invalid_tzstr)
                 with self.assertRaisesRegex(ValueError, tzstr_regex):
-                    self._zone_from_tzstr(invalid_tzstr)
+                    self.zone_from_tzstr(invalid_tzstr)
 
     @classmethod
     def _populate_test_cases(cls):
