@@ -13,7 +13,11 @@ def set_tzpath(tzpaths=None):
         base_tzpath = tzpaths
     else:
         if "PYTHONTZPATH" in os.environ:
-            base_tzpath = os.environ["PYTHONTZPATH"].split(os.pathsep)
+            env_var = os.environ["PYTHONTZPATH"]
+            if env_var:
+                base_tzpath = env_var.split(os.pathsep)
+            else:
+                base_tzpath = ()
         elif sys.platform != "win32":
             base_tzpath = [
                 "/usr/share/zoneinfo",
@@ -24,7 +28,7 @@ def set_tzpath(tzpaths=None):
 
             base_tzpath.sort(key=lambda x: not os.path.exists(x))
         else:
-            base_tzpath = []
+            base_tzpath = ()
 
     TZPATH = tuple(base_tzpath)
 

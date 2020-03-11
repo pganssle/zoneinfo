@@ -7,6 +7,7 @@ import importlib.metadata
 import io
 import json
 import lzma
+import os
 import pathlib
 import pickle
 import re
@@ -26,6 +27,7 @@ try:
 except importlib.metadata.PackageNotFoundError:
     HAS_TZDATA_PKG = False
 
+OS_ENV_LOCK = threading.Lock()
 TZPATH_LOCK = threading.Lock()
 TZPATH_TEST_LOCK = threading.Lock()
 
@@ -792,6 +794,36 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
 
 class TzPathTest(unittest.TestCase, TzPathUserMixin):
     module = zoneinfo
+
+    @staticmethod
+    @contextlib.contextmanager
+    def python_tzpath_context(value):
+        path_var = "PYTHONTZPATH"
+        try:
+            with OS_ENV_LOCK:
+                old_env = os.environ.get(path_var, None)
+                os.environ[path_var] = value
+                yield
+        finally:
+            if old_env is None:
+                del os.environ[path_var]
+            else:
+                os.environ[path_var] = old_env  # pragma: nocover
+
+    def test_env_variable(self):
+        """Tests that the environment variable works with set_tzpath"""
+        new_paths = [
+            ("", []),
+            ("/etc/zoneinfo", ["/etc/zoneinfo"]),
+            (f"/a/b/c{os.pathsep}/d/e/f", ["/a/b/c", "/d/e/f"]),
+        ]
+
+        for new_path_var, expected_result in new_paths:
+            with self.python_tzpath_context(new_path_var):
+                with self.subTest(tzpath=new_path_var):
+                    self.module.set_tzpath()
+                    tzpath = self.module.TZPATH
+                    self.assertSequenceEqual(tzpath, expected_result)
 
     def test_tzpath_error(self):
         bad_values = [
