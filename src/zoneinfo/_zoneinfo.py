@@ -125,20 +125,24 @@ class ZoneInfo(tzinfo):
             raise ValueError("dt.tzinfo is not self")
 
         timestamp = self._get_local_timestamp(dt)
+        num_trans = len(self._trans_utc)
 
-        if len(self._trans_utc) >= 1 and timestamp < self._trans_utc[0]:
+        if num_trans >= 1 and timestamp < self._trans_utc[0]:
             tti = self._tti_before
             fold = 0
-        elif timestamp > self._trans_utc[-1] and not isinstance(
-            self._tz_after, _ttinfo
-        ):
+        elif (
+            num_trans == 0 or timestamp > self._trans_utc[-1]
+        ) and not isinstance(self._tz_after, _ttinfo):
             tti, fold = self._tz_after.get_trans_info_fromutc(
                 timestamp, dt.year
             )
+        elif num_trans == 0:
+            tti = self._tz_after
+            fold = 0
         else:
             idx = bisect.bisect_right(self._trans_utc, timestamp)
 
-            if len(self._trans_utc) > 1 and timestamp >= self._trans_utc[1]:
+            if num_trans > 1 and timestamp >= self._trans_utc[1]:
                 tti_prev, tti = self._ttinfos[idx - 2 : idx]
             elif timestamp > self._trans_utc[-1]:
                 tti_prev = self._ttinfos[-1]
@@ -161,9 +165,11 @@ class ZoneInfo(tzinfo):
 
         lt = self._trans_local[dt.fold]
 
-        if ts < lt[0]:
+        num_trans = len(lt)
+
+        if num_trans and ts < lt[0]:
             return self._tti_before
-        elif ts > lt[-1]:
+        elif not num_trans or ts > lt[-1]:
             if isinstance(self._tz_after, _TZStr):
                 return self._tz_after.get_trans_info(ts, dt.year, dt.fold)
             else:
@@ -325,7 +331,7 @@ class ZoneInfo(tzinfo):
 
         This is necessary to easily find the transition times in local time"""
         if not trans_list_utc:
-            return []
+            return [[], []]
 
         # Start with the timestamps and modify in-place
         trans_list_wall = [list(trans_list_utc), list(trans_list_utc)]
