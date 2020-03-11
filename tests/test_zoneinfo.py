@@ -146,6 +146,17 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
         with self.subTest(name="from file without key"):
             self.assertRegex(repr(zi_ff_nk), class_name)
 
+    def test_bad_zones(self):
+        bad_zones = [
+            b"",  # Empty file
+            b"AAAA3" + b" " * 15,  # Bad magic
+        ]
+
+        for bad_zone in bad_zones:
+            fobj = io.BytesIO(bad_zone)
+            with self.assertRaises(ValueError):
+                ZoneInfo.from_file(fobj)
+
     def test_unambiguous(self):
         test_cases = []
         for key in self.zones():
