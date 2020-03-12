@@ -9,6 +9,8 @@ import sys
 import weakref
 from datetime import datetime, timedelta, timezone, tzinfo
 
+from . import _common, _tzpath
+
 EPOCH = datetime(1970, 1, 1)
 EPOCHORDINAL = datetime(1970, 1, 1).toordinal()
 
@@ -24,37 +26,6 @@ _DELTA_CACHE = {}
 
 def _load_timedelta(seconds):
     return _DELTA_CACHE.setdefault(seconds, timedelta(seconds=seconds))
-
-
-def set_tzpath(tzpaths=None):
-    global TZPATH
-    if tzpaths is not None:
-        if isinstance(tzpaths, (str, bytes)):
-            raise ValueError(
-                f"tzpaths must be a list or tuple, "
-                + f"not {type(tzpaths)}: {tzpaths}"
-            )
-        base_tzpath = tzpaths
-    else:
-        if "PYTHONTZPATH" in os.environ:
-            base_tzpath = os.environ["PYTHONTZPATH"].split(os.pathsep)
-        elif sys.platform != "win32":
-            base_tzpath = [
-                "/usr/share/zoneinfo",
-                "/usr/lib/zoneinfo",
-                "/usr/share/lib/zoneinfo",
-                "/etc/zoneinfo",
-            ]
-
-            base_tzpath.sort(key=lambda x: not os.path.exists(x))
-        else:
-            base_tzpath = []
-
-    TZPATH = tuple(base_tzpath)
-
-
-TZPATH = ()
-set_tzpath()
 
 
 class ZoneInfo(tzinfo):
@@ -154,20 +125,24 @@ class ZoneInfo(tzinfo):
             raise ValueError("dt.tzinfo is not self")
 
         timestamp = self._get_local_timestamp(dt)
+        num_trans = len(self._trans_utc)
 
-        if len(self._trans_utc) >= 1 and timestamp < self._trans_utc[0]:
+        if num_trans >= 1 and timestamp < self._trans_utc[0]:
             tti = self._tti_before
             fold = 0
-        elif timestamp > self._trans_utc[-1] and not isinstance(
-            self._tz_after, _ttinfo
-        ):
+        elif (
+            num_trans == 0 or timestamp > self._trans_utc[-1]
+        ) and not isinstance(self._tz_after, _ttinfo):
             tti, fold = self._tz_after.get_trans_info_fromutc(
                 timestamp, dt.year
             )
+        elif num_trans == 0:
+            tti = self._tz_after
+            fold = 0
         else:
             idx = bisect.bisect_right(self._trans_utc, timestamp)
 
-            if len(self._trans_utc) > 1 and timestamp >= self._trans_utc[1]:
+            if num_trans > 1 and timestamp >= self._trans_utc[1]:
                 tti_prev, tti = self._ttinfos[idx - 2 : idx]
             elif timestamp > self._trans_utc[-1]:
                 tti_prev = self._ttinfos[-1]
@@ -190,9 +165,11 @@ class ZoneInfo(tzinfo):
 
         lt = self._trans_local[dt.fold]
 
-        if ts < lt[0]:
+        num_trans = len(lt)
+
+        if num_trans and ts < lt[0]:
             return self._tti_before
-        elif ts > lt[-1]:
+        elif not num_trans or ts > lt[-1]:
             if isinstance(self._tz_after, _TZStr):
                 return self._tz_after.get_trans_info(ts, dt.year, dt.fold)
             else:
@@ -242,16 +219,11 @@ class ZoneInfo(tzinfo):
             return cls.nocache(key)
 
     def _find_tzfile(self, key):
-        for search_path in TZPATH:
-            filepath = os.path.join(search_path, key)
-            if os.path.isfile(filepath):
-                return filepath
-
-        return None
+        return _tzpath.find_tzfile(key)
 
     def _load_file(self, fobj):
         # Retrieve all the data as it exists in the zoneinfo file
-        trans_idx, trans_utc, utcoff, isdst, abbr, tz_str = self._load_data(
+        trans_idx, trans_utc, utcoff, isdst, abbr, tz_str = _common.load_data(
             fobj
         )
 
@@ -289,96 +261,6 @@ class ZoneInfo(tzinfo):
             self._tz_after = _parse_tz_str(tz_str)
         else:
             self._tz_after = self._ttinfos[-1]
-
-    @classmethod
-    def _load_data(cls, fobj):
-        header = _TZifHeader.from_file(fobj)
-
-        if header.version == 1:
-            time_size = 4
-            time_type = "l"
-        else:
-            # Version 2+ has 64-bit integer transition times
-            time_size = 8
-            time_type = "q"
-
-            # Version 2+ also starts with a Version 1 header and data, which
-            # we need to skip now
-            skip_bytes = (
-                header.timecnt * 5
-                + header.typecnt * 6  # Transition times and types
-                + header.charcnt  # Local time type records
-                + header.leapcnt * 8  # Time zone designations
-                + header.isstdcnt  # Leap second records
-                + header.isutcnt  # Standard/wall indicators  # UT/local indicators
-            )
-
-            fobj.seek(skip_bytes, 1)
-
-            # Now we need to read the second header, which is not the same
-            # as the first
-            header = _TZifHeader.from_file(fobj)
-
-        typecnt = header.typecnt
-        timecnt = header.timecnt
-        charcnt = header.charcnt
-
-        # The data portion starts with timecnt transitions and indices
-        if timecnt:
-            trans_list_utc = struct.unpack(
-                f">{timecnt}{time_type}", fobj.read(timecnt * time_size)
-            )
-            trans_idx = struct.unpack(f">{timecnt}B", fobj.read(timecnt))
-        else:
-            trans_list_utc = []
-            trans_idx = []
-
-        # Read the ttinfo struct, (utoff, isdst, abbrind)
-        if typecnt:
-            utcoff, isdst, abbrind = zip(
-                *(struct.unpack(">lbb", fobj.read(6)) for i in range(typecnt))
-            )
-        else:
-            utcoff = ()
-            isdst = ()
-            abbrind = ()
-
-        # Now read the abbreviations. They are null-terminated strings, indexed
-        # not by position in the array but by position in the unsplit
-        # abbreviation string. I suppose this makes more sense in C, which uses
-        # null to terminate the strings, but it's inconvenient here...
-        char_total = 0
-        abbr_vals = {}
-        for abbr in fobj.read(charcnt).decode().split("\x00"):
-            abbr_vals[char_total] = abbr
-            char_total += len(abbr) + 1
-
-        abbr = [abbr_vals[idx] for idx in abbrind]
-
-        # The remainder of the file consists of leap seconds (currently unused) and
-        # the standard/wall and ut/local indicators, which are metadata we don't need.
-        # In version 2 files, we need to skip the unnecessary data to get at the TZ string:
-        if header.version >= 2:
-            # Each leap second record has size (time_size * 4)
-            skip_bytes = header.isutcnt + header.isstdcnt + header.leapcnt * 32
-            fobj.seek(skip_bytes, 1)
-
-            c = fobj.read(1)  # Should be \n
-            assert c == b"\n", c
-
-            tz_bytes = b""
-            # TODO: Walrus operator
-            while True:
-                c = fobj.read(1)
-                if c == b"\n":
-                    break
-                tz_bytes += c
-
-            tz_str = tz_bytes.decode()
-        else:
-            tz_str = None
-
-        return trans_idx, trans_list_utc, utcoff, isdst, abbr, tz_str
 
     @staticmethod
     def _utcoff_to_dstoff(trans_idx, utcoffsets, isdsts):
@@ -449,7 +331,7 @@ class ZoneInfo(tzinfo):
 
         This is necessary to easily find the transition times in local time"""
         if not trans_list_utc:
-            return []
+            return [[], []]
 
         # Start with the timestamps and modify in-place
         trans_list_wall = [list(trans_list_utc), list(trans_list_utc)]
@@ -476,39 +358,6 @@ class ZoneInfo(tzinfo):
             trans_list_wall[1][i] += offset_1
 
         return trans_list_wall
-
-
-class _TZifHeader:
-    __slots__ = [
-        "version",
-        "isutcnt",
-        "isstdcnt",
-        "leapcnt",
-        "timecnt",
-        "typecnt",
-        "charcnt",
-    ]
-
-    def __init__(self, *args):
-        assert len(self.__slots__) == len(args)
-        for attr, val in zip(self.__slots__, args):
-            setattr(self, attr, val)
-
-    @classmethod
-    def from_file(cls, stream):
-        # The header starts with a 4-byte "magic" value
-        if stream.read(4) != b"TZif":
-            raise ValueError("Invalid TZif file: magic not found")
-
-        version = int(stream.read(1))
-        stream.read(15)
-
-        args = (version,)
-
-        # Slots are defined in the order that the bytes are arranged
-        args = args + struct.unpack(">6l", stream.read(24))
-
-        return cls(*args)
 
 
 class _ttinfo:

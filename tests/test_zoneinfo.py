@@ -7,6 +7,7 @@ import importlib.metadata
 import io
 import json
 import lzma
+import os
 import pathlib
 import pickle
 import re
@@ -26,6 +27,7 @@ try:
 except importlib.metadata.PackageNotFoundError:
     HAS_TZDATA_PKG = False
 
+OS_ENV_LOCK = threading.Lock()
 TZPATH_LOCK = threading.Lock()
 TZPATH_TEST_LOCK = threading.Lock()
 
@@ -57,8 +59,7 @@ def tearDownModule():
 @contextlib.contextmanager
 def tzpath_context(tzpath, lock=TZPATH_LOCK):
     with lock:
-        # TODO: Expose a public mechanism to get this information
-        old_path = zoneinfo._zoneinfo.TZPATH
+        old_path = zoneinfo.TZPATH
         try:
             zoneinfo.set_tzpath(tzpath)
             yield
@@ -144,6 +145,17 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
 
         with self.subTest(name="from file without key"):
             self.assertRegex(repr(zi_ff_nk), class_name)
+
+    def test_bad_zones(self):
+        bad_zones = [
+            b"",  # Empty file
+            b"AAAA3" + b" " * 15,  # Bad magic
+        ]
+
+        for bad_zone in bad_zones:
+            fobj = io.BytesIO(bad_zone)
+            with self.assertRaises(ValueError):
+                ZoneInfo.from_file(fobj)
 
     def test_unambiguous(self):
         test_cases = []
@@ -295,28 +307,29 @@ class TZStrTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._populate_test_cases()
+        cls.populate_tzstr_header()
 
-    def _zone_from_tzstr(self, tzstr):
+    @classmethod
+    def populate_tzstr_header(cls):
+        out = bytearray()
+        # The TZif format always starts with a Version 1 file followed by
+        # the Version 2+ file. In this case, we have no transitions, just
+        # the tzstr in the footer, so up to the footer, the files are
+        # identical and we can just write the same file twice in a row.
+        for i in range(2):
+            out += b"TZif"  # Magic value
+            out += b"3"  # Version
+            out += b" " * 15  # Reserved
+
+            # We will not write any of the manual transition parts
+            out += struct.pack(">6l", 0, 0, 0, 0, 0, 0)
+
+        cls._tzif_header = bytes(out)
+
+    def zone_from_tzstr(self, tzstr):
         """Creates a zoneinfo file following a POSIX rule."""
-        zonefile = io.BytesIO()
-        # Version 1 header
-        zonefile.write(b"TZif")  # Magic value
-        zonefile.write(b"3")  # Version
-        zonefile.write(b" " * 15)  # Reserved
-        # We will not write any of the manual transition parts
-        zonefile.write(struct.pack(">6l", 0, 0, 0, 0, 0, 0))
-
-        # Version 2+ header
-        zonefile.write(b"TZif")  # Magic value
-        zonefile.write(b"3")  # Version
-        zonefile.write(b" " * 15)  # Reserved
-        zonefile.write(struct.pack(">6l", 0, 0, 0, 1, 1, 4))
-
-        # Add an arbitrary offset to make things easier
-        zonefile.write(struct.pack(">1q", -(2 ** 32)))
-        zonefile.write(struct.pack(">1B", 0))
-        zonefile.write(struct.pack(">lbb", -17760, 0, 0))
-        zonefile.write(b"LMT\x00")
+        zonefile = io.BytesIO(self._tzif_header)
+        zonefile.seek(0, 2)
 
         # Write the footer
         zonefile.write(b"\x0A")
@@ -331,7 +344,7 @@ class TZStrTest(unittest.TestCase):
         i = 0
         for tzstr, cases in self.test_cases.items():
             with self.subTest(tzstr=tzstr):
-                zi = self._zone_from_tzstr(tzstr)
+                zi = self.zone_from_tzstr(tzstr)
 
             for dt_naive, offset, _ in cases:
                 dt = dt_naive.replace(tzinfo=zi)
@@ -344,7 +357,7 @@ class TZStrTest(unittest.TestCase):
     def test_tzstr_from_utc(self):
         for tzstr, cases in self.test_cases.items():
             with self.subTest(tzstr=tzstr):
-                zi = self._zone_from_tzstr(tzstr)
+                zi = self.zone_from_tzstr(tzstr)
 
             for dt_naive, offset, dt_type in cases:
                 if dt_type == self.GAP:
@@ -412,7 +425,7 @@ class TZStrTest(unittest.TestCase):
                 # the problematic TZ string if that's the cause of failure.
                 tzstr_regex = re.escape(invalid_tzstr)
                 with self.assertRaisesRegex(ValueError, tzstr_regex):
-                    self._zone_from_tzstr(invalid_tzstr)
+                    self.zone_from_tzstr(invalid_tzstr)
 
     @classmethod
     def _populate_test_cases(cls):
@@ -789,6 +802,89 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
         pkl_2 = pickle.dumps(zi)
         zi_rt_2 = pickle.loads(pkl_2)
         self.assertIs(zi, zi_rt_2)
+
+
+class TzPathTest(unittest.TestCase, TzPathUserMixin):
+    module = zoneinfo
+
+    @staticmethod
+    @contextlib.contextmanager
+    def python_tzpath_context(value):
+        path_var = "PYTHONTZPATH"
+        try:
+            with OS_ENV_LOCK:
+                old_env = os.environ.get(path_var, None)
+                os.environ[path_var] = value
+                yield
+        finally:
+            if old_env is None:
+                del os.environ[path_var]
+            else:
+                os.environ[path_var] = old_env  # pragma: nocover
+
+    def test_env_variable(self):
+        """Tests that the environment variable works with set_tzpath"""
+        new_paths = [
+            ("", []),
+            ("/etc/zoneinfo", ["/etc/zoneinfo"]),
+            (f"/a/b/c{os.pathsep}/d/e/f", ["/a/b/c", "/d/e/f"]),
+        ]
+
+        for new_path_var, expected_result in new_paths:
+            with self.python_tzpath_context(new_path_var):
+                with self.subTest(tzpath=new_path_var):
+                    self.module.set_tzpath()
+                    tzpath = self.module.TZPATH
+                    self.assertSequenceEqual(tzpath, expected_result)
+
+    def test_tzpath_error(self):
+        bad_values = [
+            "/etc/zoneinfo:/usr/share/zoneinfo",
+            b"/etc/zoneinfo:/usr/share/zoneinfo",
+            0,
+        ]
+
+        for bad_value in bad_values:
+            with self.subTest(value=bad_value):
+                with self.assertRaises(TypeError):
+                    self.module.set_tzpath(bad_value)
+
+    def test_tzpath_attribute(self):
+        tzpath_0 = ["/one", "/two"]
+        tzpath_1 = ["/three"]
+
+        with tzpath_context(tzpath_0):
+            query_0 = self.module.TZPATH
+
+        with tzpath_context(tzpath_1):
+            query_1 = self.module.TZPATH
+
+        self.assertSequenceEqual(tzpath_0, query_0)
+        self.assertSequenceEqual(tzpath_1, query_1)
+
+
+class TestModule(unittest.TestCase):
+    module = zoneinfo
+
+    def test_getattr_error(self):
+        with self.assertRaises(AttributeError):
+            self.module.NOATTRIBUTE
+
+    def test_dir_contains_all(self):
+        """dir(self.module) should at least contain everything in __all__."""
+        module_all_set = set(self.module.__all__)
+        module_dir_set = set(dir(self.module))
+
+        difference = module_all_set - module_dir_set
+
+        self.assertFalse(difference)
+
+    def test_dir_unique(self):
+        """Test that there are no duplicates in dir(self.module)"""
+        module_dir = dir(self.module)
+        module_unique = set(module_dir)
+
+        self.assertCountEqual(module_dir, module_unique)
 
 
 @dataclasses.dataclass
