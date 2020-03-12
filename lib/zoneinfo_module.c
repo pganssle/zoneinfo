@@ -263,6 +263,123 @@ zoneinfo_tzname(PyObject *self, PyObject *dt)
     return tti->tzname;
 }
 
+#define HASTZINFO(p) (((_PyDateTime_BaseTZInfo *)(p))->hastzinfo)
+#define GET_DT_TZINFO(p) \
+    (HASTZINFO(p) ? ((PyDateTime_DateTime *)(p))->tzinfo : Py_None)
+
+#define TZRULE_STATIC(p) ((p).start == NULL)
+
+static PyObject *
+zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
+{
+    if (!PyDateTime_Check(dt)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "fromutc: argument must be a datetime");
+        return NULL;
+    }
+    if (GET_DT_TZINFO(dt) != obj_self) {
+        PyErr_SetString(PyExc_ValueError,
+                        "fromutc: dt.tzinfo "
+                        "is not self");
+        return NULL;
+    }
+
+    PyZoneInfo_ZoneInfo *self = (PyZoneInfo_ZoneInfo *)obj_self;
+
+    int64_t timestamp;
+    if (get_local_timestamp(dt, &timestamp)) {
+        return NULL;
+    }
+    size_t num_trans = self->num_transitions;
+
+    _ttinfo *tti = NULL;
+    unsigned char fold = 0;
+
+    if (num_trans >= 1 && timestamp < self->trans_list_utc[0]) {
+        tti = self->ttinfo_before;
+    }
+    else if ((num_trans == 0 ||
+              timestamp > self->trans_list_utc[num_trans - 1]) &&
+             !TZRULE_STATIC(self->tzrule_after)) {
+        PyErr_Format(PyExc_NotImplementedError,
+                     "Dates after the final transition not yet supported");
+        return NULL;
+    }
+    else if (num_trans == 0) {
+        tti = &self->tzrule_after.std;
+    }
+    else {
+        size_t idx = _bisect(timestamp, self->trans_list_utc, num_trans);
+        _ttinfo *tti_prev = NULL;
+
+        if (idx >= 2) {
+            tti_prev = self->trans_ttinfos[idx - 2];
+            tti = self->trans_ttinfos[idx - 1];
+        }
+        else if (idx == num_trans) {
+            // We'll only hit this branch if tzrule_after is static
+            tti_prev = self->trans_ttinfos[num_trans - 1];
+            tti = &self->tzrule_after.std;
+        }
+        else {
+            tti_prev = self->ttinfo_before;
+            tti = self->trans_ttinfos[0];
+        }
+
+        // Detect fold
+        int64_t shift =
+            (int64_t)(tti_prev->utcoff_seconds - tti->utcoff_seconds);
+        if (shift > (timestamp - self->trans_list_utc[idx - 1])) {
+            fold = 1;
+        }
+    }
+
+    PyObject *tmp = PyNumber_Add(dt, tti->utcoff);
+    if (tmp == NULL) {
+        return NULL;
+    }
+
+    if (fold) {
+        if (PyDateTime_CheckExact(tmp)) {
+            ((PyDateTime_DateTime *)tmp)->fold = 1;
+            dt = tmp;
+        }
+        else {
+            PyObject *replace = PyObject_GetAttrString(tmp, "replace");
+            PyObject *args = PyTuple_New(0);
+            PyObject *kwargs = PyDict_New();
+            PyObject *one = PyLong_FromLong(1);
+
+            Py_DECREF(tmp);
+            if (args == NULL || kwargs == NULL || replace == NULL ||
+                one == NULL) {
+                Py_XDECREF(args);
+                Py_XDECREF(kwargs);
+                Py_XDECREF(replace);
+                Py_XDECREF(one);
+                return NULL;
+            }
+
+            dt = NULL;
+            if (!PyDict_SetItemString(kwargs, "fold", one)) {
+                dt = PyObject_Call(replace, args, kwargs);
+            }
+
+            Py_DECREF(args);
+            Py_DECREF(kwargs);
+            Py_DECREF(replace);
+
+            if (dt == NULL) {
+                return NULL;
+            }
+        }
+    }
+    else {
+        dt = tmp;
+    }
+    return dt;
+}
+
 /* It is relatively expensive to construct new timedelta objects, and in most
  * cases we're looking at a relatively small number of timedeltas, such as
  * integer number of hours, etc. We will keep a cache so that we construct
@@ -899,6 +1016,9 @@ static PyMethodDef zoneinfo_methods[] = {
     {"tzname", (PyCFunction)zoneinfo_tzname, METH_O,
      PyDoc_STR("Retrieve a string containing the abbreviation for the time "
                "zone that applies in a zone at a given datetime.")},
+    {"fromutc", (PyCFunction)zoneinfo_fromutc, METH_O,
+     PyDoc_STR("Given a datetime with local time in UTC, retrieve an adjusted "
+               "datetime in local time.")},
     {NULL} /* Sentinel */
 };
 

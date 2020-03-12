@@ -300,7 +300,6 @@ class CZoneInfoTest(ZoneInfoTest):
     test_str = None
     test_repr = None
     test_bad_zones = None
-    test_folds_from_utc = None
 
     def load_transition_examples(self, key):
         # Support for datetimes after the last transition are not yet
@@ -315,6 +314,56 @@ class CZoneInfoTest(ZoneInfoTest):
 
             if zt.transition <= max_dt:
                 yield zt
+
+    def test_fold_mutate(self):
+        """Test that fold isn't mutated when no change is necessary.
+
+        The underlying C API is capable of mutating datetime objects, and
+        may rely on the fact that addition of a datetime object returns a
+        new datetime; this test ensures that the input datetime to fromutc
+        is not mutated.
+        """
+
+        def to_subclass(dt):
+            class SameAddSubclass(type(dt)):
+                def __add__(self, other):
+                    if other == timedelta(0):
+                        return self
+                    return super().__add__(other)
+
+            return SameAddSubclass(
+                dt.year,
+                dt.month,
+                dt.day,
+                dt.hour,
+                dt.minute,
+                dt.second,
+                dt.microsecond,
+                fold=dt.fold,
+                tzinfo=dt.tzinfo,
+            )
+
+        subclass = [False, True]
+
+        key = "Europe/London"
+        zi = self.zone_from_key("Europe/London")
+        for zt in self.load_transition_examples(key):
+            if zt.fold and zt.offset_after.utcoffset == ZERO:
+                example = zt.transition_utc.replace(tzinfo=zi)
+                break
+
+        for subclass in [False, True]:
+            if subclass:
+                dt = to_subclass(example)
+            else:
+                dt = example
+
+            with self.subTest(subclass=subclass):
+                dt_fromutc = zi.fromutc(dt)
+
+                self.assertEqual(dt_fromutc.fold, 1)
+                self.assertEqual(dt.fold, 0)
+
 
 
 class ZoneInfoTestSubclass(ZoneInfoTest):
