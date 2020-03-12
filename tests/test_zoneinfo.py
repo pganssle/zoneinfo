@@ -16,7 +16,7 @@ import struct
 import tempfile
 import threading
 import unittest
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import zoneinfo
 from zoneinfo import _zoneinfo as py_zoneinfo
@@ -158,6 +158,24 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
             fobj = io.BytesIO(bad_zone)
             with self.assertRaises(ValueError):
                 self.klass.from_file(fobj)
+
+    def test_fromutc_errors(self):
+        key = next(iter(self.zones()))
+        zone = self.zone_from_key(key)
+
+        bad_values = [
+            (datetime(2019, 1, 1, tzinfo=timezone.utc), ValueError),
+            (datetime(2019, 1, 1), ValueError),
+            (date(2019, 1, 1), TypeError),
+            (time(0), TypeError),
+            (0, TypeError),
+            ("2019-01-01", TypeError),
+        ]
+
+        for val, exc_type in bad_values:
+            with self.subTest(val=val):
+                with self.assertRaises(exc_type):
+                    zone.fromutc(val)
 
     def test_unambiguous(self):
         test_cases = []
