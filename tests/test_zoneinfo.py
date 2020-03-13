@@ -19,6 +19,7 @@ import unittest
 from datetime import date, datetime, time, timedelta, timezone
 
 import zoneinfo
+from zoneinfo import _czoneinfo as c_zoneinfo
 from zoneinfo import _zoneinfo as py_zoneinfo
 
 try:
@@ -1072,6 +1073,14 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
         self.assertIsNot(la0, la1)
         self.assertIsNot(dub0, dub1)
         self.assertIs(tok0, tok1)
+
+
+class CZoneInfoCacheTest(ZoneInfoCacheTest):
+    klass = c_zoneinfo.ZoneInfo
+
+    test_nocache = None
+    test_clear_cache_one_key = None
+    test_clear_cache_two_keys = None
 
 
 class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
