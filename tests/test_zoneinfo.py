@@ -294,6 +294,29 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
                     self.assertEqual(dt_after.fold, 1, (dt_after, dt_utc))
 
 
+class CZoneInfoTest(ZoneInfoTest):
+    klass = c_zoneinfo.ZoneInfo
+
+    test_str = None
+    test_repr = None
+    test_bad_zones = None
+    test_folds_from_utc = None
+
+    def load_transition_examples(self, key):
+        # Support for datetimes after the last transition are not yet
+        # supported, so we'll skip those examples for now.
+        epoch = datetime(1970, 1, 1)
+        max_offset_32 = timedelta(seconds=2 ** 31)
+        max_dt = epoch + max_offset_32
+
+        for zt in ZoneDumpData.load_transition_examples(key):
+            if key == "Asia/Tokyo" and zt.transition > datetime(1951, 9, 1):
+                continue
+
+            if zt.transition <= max_dt:
+                yield zt
+
+
 class ZoneInfoTestSubclass(ZoneInfoTest):
     @classmethod
     def setUpClass(cls):

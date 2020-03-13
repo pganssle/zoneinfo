@@ -43,6 +43,11 @@ typedef struct {
 static PyObject *ZONEINFO_WEAK_CACHE = NULL;
 static PyObject *TIMEDELTA_CACHE = NULL;
 
+static const int EPOCHORDINAL = 719163;
+static int DAYS_BEFORE_MONTH[] = {
+    -1, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,
+};
+
 // Forward declarations
 static int
 load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj);
@@ -59,6 +64,19 @@ static void
 xdecref_ttinfo(_ttinfo *ttinfo);
 static PyObject *
 load_timedelta(long seconds);
+
+static int
+get_local_timestamp(PyObject *dt, int64_t *local_ts);
+static _ttinfo *
+find_ttinfo(PyZoneInfo_ZoneInfo *self, PyObject *dt);
+
+static int
+ymd_to_ord(int y, int m, int d);
+static int
+is_leap_year(int year);
+
+static size_t
+_bisect(const int64_t value, const int64_t *arr, size_t size);
 
 static PyObject *
 zoneinfo_new_instance(PyTypeObject *type, PyObject *key)
@@ -210,6 +228,39 @@ zoneinfo_clear_cache(PyObject *self)
 {
     PyObject_CallMethod(ZONEINFO_WEAK_CACHE, "clear", NULL);
     Py_RETURN_NONE;
+}
+
+static PyObject *
+zoneinfo_utcoffset(PyObject *self, PyObject *dt)
+{
+    _ttinfo *tti = find_ttinfo((PyZoneInfo_ZoneInfo *)self, dt);
+    if (tti == NULL) {
+        return NULL;
+    }
+    Py_INCREF(tti->utcoff);
+    return tti->utcoff;
+}
+
+static PyObject *
+zoneinfo_dst(PyObject *self, PyObject *dt)
+{
+    _ttinfo *tti = find_ttinfo((PyZoneInfo_ZoneInfo *)self, dt);
+    if (tti == NULL) {
+        return NULL;
+    }
+    Py_INCREF(tti->dstoff);
+    return tti->dstoff;
+}
+
+static PyObject *
+zoneinfo_tzname(PyObject *self, PyObject *dt)
+{
+    _ttinfo *tti = find_ttinfo((PyZoneInfo_ZoneInfo *)self, dt);
+    if (tti == NULL) {
+        return NULL;
+    }
+    Py_INCREF(tti->tzname);
+    return tti->tzname;
 }
 
 /* It is relatively expensive to construct new timedelta objects, and in most
@@ -689,6 +740,148 @@ ts_to_local(size_t *trans_idx, int64_t *trans_utc, long *utcoff,
     return 0;
 }
 
+/* Simple bisect_right binary search implementation */
+static size_t
+_bisect(const int64_t value, const int64_t *arr, size_t size)
+{
+    size_t lo = 0;
+    size_t hi = size;
+    size_t m;
+
+    while (lo < hi) {
+        m = (lo + hi) / 2;
+        if (arr[m] > value) {
+            hi = m;
+        }
+        else {
+            lo = m + 1;
+        }
+    }
+
+    return hi;
+}
+
+/* Find the ttinfo rules that apply at a given local datetime. */
+static _ttinfo *
+find_ttinfo(PyZoneInfo_ZoneInfo *self, PyObject *dt)
+{
+    int64_t ts;
+    if (get_local_timestamp(dt, &ts)) {
+        return NULL;
+    }
+
+    unsigned char fold = PyDateTime_DATE_GET_FOLD(dt);
+    assert(fold < 2);
+    int64_t *local_transitions = self->trans_list_wall[fold];
+
+    if (ts < local_transitions[0]) {
+        return self->ttinfo_before;
+    }
+    else if (ts > local_transitions[self->num_transitions - 1]) {
+        PyErr_Format(PyExc_NotImplementedError,
+                     "Dates beyond the last transition not yet implemented.");
+        return NULL;
+    }
+    else {
+        size_t idx = _bisect(ts, local_transitions, self->num_transitions) - 1;
+        assert(idx < self->num_transitions);
+        return self->trans_ttinfos[idx];
+    }
+}
+
+static int
+is_leap_year(int year)
+{
+    const unsigned int ayear = (unsigned int)year;
+    return ayear % 4 == 0 && (ayear % 100 != 0 || ayear % 400 == 0);
+}
+
+/* Calculates ordinal datetime from year, month and day. */
+static int
+ymd_to_ord(int y, int m, int d)
+{
+    y -= 1;
+    int days_before_year = (y * 365) + (y / 4) - (y / 100) + (y / 400);
+    int yearday = DAYS_BEFORE_MONTH[m];
+    if (m > 2 && is_leap_year(y + 1)) {
+        yearday += 1;
+    }
+
+    return days_before_year + yearday + d;
+}
+
+/* Calculate the number of seconds since 1970-01-01 in local time.
+ *
+ * This gets a datetime in the same "units" as self->trans_list_wall so that we
+ * can easily determine which transitions a datetime falls between. See the
+ * comment above ts_to_local for more information.
+ * */
+static int
+get_local_timestamp(PyObject *dt, int64_t *local_ts)
+{
+    assert(local_ts != NULL);
+
+    int hour, minute, second;
+    int ord;
+    if (PyDateTime_CheckExact(dt)) {
+        int y = PyDateTime_GET_YEAR(dt);
+        int m = PyDateTime_GET_MONTH(dt);
+        int d = PyDateTime_GET_DAY(dt);
+        hour = PyDateTime_DATE_GET_HOUR(dt);
+        minute = PyDateTime_DATE_GET_MINUTE(dt);
+        second = PyDateTime_DATE_GET_SECOND(dt);
+
+        ord = ymd_to_ord(y, m, d);
+    }
+    else {
+        PyObject *num = PyObject_CallMethod(dt, "toordinal", NULL);
+        if (num == NULL) {
+            return -1;
+        }
+
+        ord = PyLong_AsLong(num);
+        Py_DECREF(num);
+        if (ord == -1 && PyErr_Occurred()) {
+            return -1;
+        }
+
+        num = PyObject_GetAttrString(dt, "hour");
+        if (num == NULL) {
+            return -1;
+        }
+        hour = PyLong_AsLong(num);
+        Py_DECREF(num);
+        if (hour == -1) {
+            return -1;
+        }
+
+        num = PyObject_GetAttrString(dt, "minute");
+        if (num == NULL) {
+            return -1;
+        }
+        minute = PyLong_AsLong(num);
+        Py_DECREF(num);
+        if (minute == -1) {
+            return -1;
+        }
+
+        num = PyObject_GetAttrString(dt, "second");
+        if (num == NULL) {
+            return -1;
+        }
+        second = PyLong_AsLong(num);
+        Py_DECREF(num);
+        if (second == -1) {
+            return -1;
+        }
+    }
+
+    *local_ts = (int64_t)(ord - EPOCHORDINAL) * 86400 +
+                (int64_t)(hour * 3600 + minute * 60 + second);
+
+    return 0;
+}
+
 /////
 // Specify the ZoneInfo type
 static PyMethodDef zoneinfo_methods[] = {
@@ -697,6 +890,15 @@ static PyMethodDef zoneinfo_methods[] = {
     {"nocache", (PyCFunction)zoneinfo_nocache,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Get a new instance of ZoneInfo, bypassing the cache.")},
+    {"utcoffset", (PyCFunction)zoneinfo_utcoffset, METH_O,
+     PyDoc_STR("Retrieve a timedelta representing the UTC offset in a zone at "
+               "the given datetime.")},
+    {"dst", (PyCFunction)zoneinfo_dst, METH_O,
+     PyDoc_STR("Retrieve a timedelta representing the amount of DST applied "
+               "in a zone at the given datetime.")},
+    {"tzname", (PyCFunction)zoneinfo_tzname, METH_O,
+     PyDoc_STR("Retrieve a string containing the abbreviation for the time "
+               "zone that applies in a zone at a given datetime.")},
     {NULL} /* Sentinel */
 };
 
