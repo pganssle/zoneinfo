@@ -15,12 +15,12 @@ def load_data(fobj):
         # Version 2+ also starts with a Version 1 header and data, which
         # we need to skip now
         skip_bytes = (
-            header.timecnt * 5
-            + header.typecnt * 6  # Transition times and types
-            + header.charcnt  # Local time type records
-            + header.leapcnt * 8  # Time zone designations
-            + header.isstdcnt  # Leap second records
-            + header.isutcnt  # Standard/wall indicators  # UT/local indicators
+            header.timecnt * 5  # Transition times and types
+            + header.typecnt * 6  # Local time type records
+            + header.charcnt  # Time zone designations
+            + header.leapcnt * 8  # Leap second records
+            + header.isstdcnt  # Standard/wall indicators
+            + header.isutcnt  # UT/local indicators
         )
 
         fobj.seek(skip_bytes, 1)

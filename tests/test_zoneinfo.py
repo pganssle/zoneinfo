@@ -16,7 +16,7 @@ import struct
 import tempfile
 import threading
 import unittest
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import zoneinfo
 from zoneinfo import _zoneinfo as py_zoneinfo
@@ -148,6 +148,17 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
         with self.subTest(name="from file without key"):
             self.assertRegex(repr(zi_ff_nk), class_name)
 
+    def test_bad_keys(self):
+        bad_keys = [
+            "Eurasia/Badzone",  # Plausible but does not exist
+            "🇨🇦",  # Non-ascii
+            "America/New\ud800York",  # Contains surrogate character
+        ]
+
+        for bad_key in bad_keys:
+            with self.assertRaises(ValueError):
+                self.klass(bad_key)
+
     def test_bad_zones(self):
         bad_zones = [
             b"",  # Empty file
@@ -158,6 +169,24 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
             fobj = io.BytesIO(bad_zone)
             with self.assertRaises(ValueError):
                 self.klass.from_file(fobj)
+
+    def test_fromutc_errors(self):
+        key = next(iter(self.zones()))
+        zone = self.zone_from_key(key)
+
+        bad_values = [
+            (datetime(2019, 1, 1, tzinfo=timezone.utc), ValueError),
+            (datetime(2019, 1, 1), ValueError),
+            (date(2019, 1, 1), TypeError),
+            (time(0), TypeError),
+            (0, TypeError),
+            ("2019-01-01", TypeError),
+        ]
+
+        for val, exc_type in bad_values:
+            with self.subTest(val=val):
+                with self.assertRaises(exc_type):
+                    zone.fromutc(val)
 
     def test_unambiguous(self):
         test_cases = []
@@ -299,6 +328,179 @@ class TZDataTests(ZoneInfoTest):
 
     def zone_from_key(self, key):
         return self.klass(key=key)
+
+
+class WeirdZoneTest(unittest.TestCase):
+    klass = py_zoneinfo.ZoneInfo
+
+    def test_one_transition(self):
+        LMT = ZoneOffset("LMT", -timedelta(hours=6, minutes=31, seconds=2))
+        STD = ZoneOffset("STD", -timedelta(hours=6))
+
+        transitions = [
+            ZoneTransition(datetime(1883, 6, 9, 14), LMT, STD),
+        ]
+
+        after = "STD6"
+
+        zf = self.construct_zone(transitions, after)
+        zi = self.klass.from_file(zf)
+
+        dt0 = datetime(1883, 6, 9, 1, tzinfo=zi)
+        dt1 = datetime(1883, 6, 10, 1, tzinfo=zi)
+
+        for dt, offset in [(dt0, LMT), (dt1, STD)]:
+            with self.subTest(name="local", dt=dt):
+                self.assertEqual(dt.tzname(), offset.tzname)
+                self.assertEqual(dt.utcoffset(), offset.utcoffset)
+                self.assertEqual(dt.dst(), offset.dst)
+
+        dts = [
+            (
+                datetime(1883, 6, 9, 1, tzinfo=zi),
+                datetime(1883, 6, 9, 7, 31, 2, tzinfo=timezone.utc),
+            ),
+            (
+                datetime(2010, 4, 1, 12, tzinfo=zi),
+                datetime(2010, 4, 1, 18, tzinfo=timezone.utc),
+            ),
+        ]
+
+        for dt_local, dt_utc in dts:
+            with self.subTest(name="fromutc", dt=dt_local):
+                dt_actual = dt_utc.astimezone(zi)
+                self.assertEqual(dt_actual, dt_local)
+
+                dt_utc_actual = dt_local.astimezone(timezone.utc)
+                self.assertEqual(dt_utc_actual, dt_utc)
+
+    def test_one_zone_dst(self):
+        DST = ZoneOffset("DST", ONE_H, ONE_H)
+        transitions = [
+            ZoneTransition(datetime(1970, 1, 1), DST, DST),
+        ]
+
+        after = "STD0DST-1,0/0,J365/25"
+
+        zf = self.construct_zone(transitions, after)
+        zi = self.klass.from_file(zf)
+
+        dts = [
+            datetime(1900, 3, 1),
+            datetime(1965, 9, 12),
+            datetime(1970, 1, 1),
+            datetime(2010, 11, 3),
+            datetime(2040, 1, 1),
+        ]
+
+        for dt in dts:
+            dt = dt.replace(tzinfo=zi)
+            with self.subTest(dt=dt):
+                self.assertEqual(dt.tzname(), DST.tzname)
+                self.assertEqual(dt.utcoffset(), DST.utcoffset)
+                self.assertEqual(dt.dst(), DST.dst)
+
+    def construct_zone(self, transitions, after=None, version=3):
+        # These are not used for anything, so we're not going to include
+        # them for now.
+        isutc = []
+        isstd = []
+        leap_seconds = []
+
+        offset_lists = [[], []]
+        trans_times_lists = [[], []]
+        trans_idx_lists = [[], []]
+
+        v1_range = (-(2 ** 31), 2 ** 31)
+        v2_range = (-(2 ** 63), 2 ** 63)
+        ranges = [v1_range, v2_range]
+
+        transitions.sort(key=lambda x: x.transition)
+
+        for zt in transitions:
+            trans_time = int(zt.transition_utc.timestamp())
+            offset_before = zt.offset_before
+            offset_after = zt.offset_after
+
+            for v, (dt_min, dt_max) in enumerate(ranges):
+                offsets = offset_lists[v]
+                trans_times = trans_times_lists[v]
+                trans_idx = trans_idx_lists[v]
+
+                if not (dt_min <= trans_time <= dt_max):
+                    continue
+
+                if offset_before not in offsets:
+                    offsets.append(offset_before)
+
+                if offset_after not in offsets:
+                    offsets.append(offset_after)
+
+                trans_times.append(trans_time)
+                trans_idx.append(offsets.index(offset_after))
+
+        isutcnt = len(isutc)
+        isstdcnt = len(isstd)
+        leapcnt = len(leap_seconds)
+
+        zonefile = io.BytesIO()
+
+        time_types = ("l", "q")
+        for v in range(min((version, 2))):
+            offsets = offset_lists[v]
+            trans_times = trans_times_lists[v]
+            trans_idx = trans_idx_lists[v]
+            time_type = time_types[v]
+
+            # Translate the offsets into something closer to the C values
+            abbrstr = bytearray()
+            ttinfos = []
+
+            for offset in offsets:
+                utcoff = int(offset.utcoffset.total_seconds())
+                isdst = bool(offset.dst)
+                abbrind = len(abbrstr)
+
+                ttinfos.append((utcoff, isdst, abbrind))
+                abbrstr += offset.tzname.encode("ascii") + b"\x00"
+            abbrstr = bytes(abbrstr)
+
+            typecnt = len(offsets)
+            timecnt = len(trans_times)
+            charcnt = len(abbrstr)
+
+            # Write the header
+            zonefile.write(b"TZif")
+            zonefile.write(b"%d" % version)
+            zonefile.write(b" " * 15)
+            zonefile.write(
+                struct.pack(
+                    ">6l", isutcnt, isstdcnt, leapcnt, timecnt, typecnt, charcnt
+                )
+            )
+
+            # Now the transition data
+            zonefile.write(struct.pack(f">{timecnt}{time_type}", *trans_times))
+            zonefile.write(struct.pack(f">{timecnt}B", *trans_idx))
+
+            for ttinfo in ttinfos:
+                zonefile.write(struct.pack(">lbb", *ttinfo))
+
+            zonefile.write(bytes(abbrstr))
+
+            # Now the metadata and leap seconds
+            zonefile.write(struct.pack(f"{isutcnt}b", *isutc))
+            zonefile.write(struct.pack(f"{isstdcnt}b", *isstd))
+            zonefile.write(struct.pack(f">{leapcnt}l", *leap_seconds))
+
+            # Finally we write the TZ string if we're writing a Version 2+ file
+            if v > 0:
+                zonefile.write(b"\x0A")
+                zonefile.write(after.encode("ascii"))
+                zonefile.write(b"\x0A")
+
+        zonefile.seek(0)
+        return zonefile
 
 
 class TZStrTest(unittest.TestCase):
