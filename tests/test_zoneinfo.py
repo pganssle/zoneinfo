@@ -148,6 +148,17 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
         with self.subTest(name="from file without key"):
             self.assertRegex(repr(zi_ff_nk), class_name)
 
+    def test_bad_keys(self):
+        bad_keys = [
+            "Eurasia/Badzone",  # Plausible but does not exist
+            "🇨🇦",  # Non-ascii
+            "America/New\ud800York",  # Contains surrogate character
+        ]
+
+        for bad_key in bad_keys:
+            with self.assertRaises(ValueError):
+                self.klass(bad_key)
+
     def test_bad_zones(self):
         bad_zones = [
             b"",  # Empty file
