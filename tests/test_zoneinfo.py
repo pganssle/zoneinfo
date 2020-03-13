@@ -19,7 +19,7 @@ import unittest
 from datetime import datetime, time, timedelta, timezone
 
 import zoneinfo
-from zoneinfo import ZoneInfo
+from zoneinfo import _zoneinfo as py_zoneinfo
 
 try:
     importlib.metadata.metadata("tzdata")
@@ -92,12 +92,14 @@ class TzPathUserMixin:
 
 
 class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
+    klass = py_zoneinfo.ZoneInfo
+
     @property
     def tzpath(self):
         return [ZONEINFO_DATA.tzpath]
 
     def zone_from_key(self, key):
-        return ZoneInfo(key)
+        return self.klass(key)
 
     def zones(self):
         return ZoneDumpData.transition_keys()
@@ -119,7 +121,7 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
 
         with open(file_path, "rb") as f:
             with self.subTest(test_name="Repr test", path=file_path):
-                zi_ff = ZoneInfo.from_file(f)
+                zi_ff = self.klass.from_file(f)
                 self.assertEqual(str(zi_ff), repr(zi_ff))
 
     def test_repr(self):
@@ -127,7 +129,7 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
         # least contain the name of the class.
         key = next(iter(self.zones()))
 
-        zi = ZoneInfo(key)
+        zi = self.klass(key)
         class_name = "ZoneInfo"
         with self.subTest(name="from key"):
             self.assertRegex(repr(zi), class_name)
@@ -135,13 +137,13 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
         file_key = ZONEINFO_DATA.keys[0]
         file_path = ZONEINFO_DATA.path_from_key(file_key)
         with open(file_path, "rb") as f:
-            zi_ff = ZoneInfo.from_file(f, key=file_key)
+            zi_ff = self.klass.from_file(f, key=file_key)
 
         with self.subTest(name="from file with key"):
             self.assertRegex(repr(zi_ff), class_name)
 
         with open(file_path, "rb") as f:
-            zi_ff_nk = ZoneInfo.from_file(f)
+            zi_ff_nk = self.klass.from_file(f)
 
         with self.subTest(name="from file without key"):
             self.assertRegex(repr(zi_ff_nk), class_name)
@@ -155,7 +157,7 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
         for bad_zone in bad_zones:
             fobj = io.BytesIO(bad_zone)
             with self.assertRaises(ValueError):
-                ZoneInfo.from_file(fobj)
+                self.klass.from_file(fobj)
 
     def test_unambiguous(self):
         test_cases = []
@@ -296,10 +298,12 @@ class TZDataTests(ZoneInfoTest):
         return []
 
     def zone_from_key(self, key):
-        return ZoneInfo(key=key)
+        return self.klass(key=key)
 
 
 class TZStrTest(unittest.TestCase):
+    klass = py_zoneinfo.ZoneInfo
+
     NORMAL = 0
     FOLD = 1
     GAP = 2
@@ -338,7 +342,7 @@ class TZStrTest(unittest.TestCase):
 
         zonefile.seek(0)
 
-        return ZoneInfo.from_file(zonefile, key=tzstr)
+        return self.klass.from_file(zonefile, key=tzstr)
 
     def test_tzstr_localized(self):
         i = 0
@@ -642,8 +646,10 @@ class TZStrTest(unittest.TestCase):
 
 
 class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
+    klass = py_zoneinfo.ZoneInfo
+
     def setUp(self):
-        ZoneInfo.clear_cache()
+        self.klass.clear_cache()
         super().setUp()
 
     @property
@@ -652,19 +658,19 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
 
     def test_ephemeral_zones(self):
         self.assertIs(
-            ZoneInfo("America/Los_Angeles"), ZoneInfo("America/Los_Angeles")
+            self.klass("America/Los_Angeles"), self.klass("America/Los_Angeles")
         )
 
     def test_strong_refs(self):
-        tz0 = ZoneInfo("Australia/Sydney")
-        tz1 = ZoneInfo("Australia/Sydney")
+        tz0 = self.klass("Australia/Sydney")
+        tz1 = self.klass("Australia/Sydney")
 
         self.assertIs(tz0, tz1)
 
     def test_nocache(self):
 
-        tz0 = ZoneInfo("Europe/Lisbon")
-        tz1 = ZoneInfo.nocache("Europe/Lisbon")
+        tz0 = self.klass("Europe/Lisbon")
+        tz1 = self.klass.nocache("Europe/Lisbon")
 
         self.assertIsNot(tz0, tz1)
 
@@ -675,35 +681,37 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
         with a given key, the primary constructor must continue to return
         the same object.
         """
-        zi0 = ZoneInfo("America/Los_Angeles")
+        zi0 = self.klass("America/Los_Angeles")
         with tzpath_context([]):
-            zi1 = ZoneInfo("America/Los_Angeles")
+            zi1 = self.klass("America/Los_Angeles")
 
         self.assertIs(zi0, zi1)
 
     def test_clear_cache_one_key(self):
         """Tests that you can clear a single key from the cache."""
-        la0 = ZoneInfo("America/Los_Angeles")
-        dub0 = ZoneInfo("Europe/Dublin")
+        la0 = self.klass("America/Los_Angeles")
+        dub0 = self.klass("Europe/Dublin")
 
-        ZoneInfo.clear_cache(only_keys=["America/Los_Angeles"])
+        self.klass.clear_cache(only_keys=["America/Los_Angeles"])
 
-        la1 = ZoneInfo("America/Los_Angeles")
-        dub1 = ZoneInfo("Europe/Dublin")
+        la1 = self.klass("America/Los_Angeles")
+        dub1 = self.klass("Europe/Dublin")
 
         self.assertIsNot(la0, la1)
         self.assertIs(dub0, dub1)
 
     def test_clear_cache_two_keys(self):
-        la0 = ZoneInfo("America/Los_Angeles")
-        dub0 = ZoneInfo("Europe/Dublin")
-        tok0 = ZoneInfo("Asia/Tokyo")
+        la0 = self.klass("America/Los_Angeles")
+        dub0 = self.klass("Europe/Dublin")
+        tok0 = self.klass("Asia/Tokyo")
 
-        ZoneInfo.clear_cache(only_keys=["America/Los_Angeles", "Europe/Dublin"])
+        self.klass.clear_cache(
+            only_keys=["America/Los_Angeles", "Europe/Dublin"]
+        )
 
-        la1 = ZoneInfo("America/Los_Angeles")
-        dub1 = ZoneInfo("Europe/Dublin")
-        tok1 = ZoneInfo("Asia/Tokyo")
+        la1 = self.klass("America/Los_Angeles")
+        dub1 = self.klass("Europe/Dublin")
+        tok1 = self.klass("Asia/Tokyo")
 
         self.assertIsNot(la0, la1)
         self.assertIsNot(dub0, dub1)
@@ -711,8 +719,10 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
 
 
 class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
+    klass = py_zoneinfo.ZoneInfo
+
     def setUp(self):
-        ZoneInfo.clear_cache()
+        self.klass.clear_cache()
         super().setUp()
 
     @property
@@ -720,7 +730,7 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
         return [ZONEINFO_DATA.tzpath]
 
     def test_cache_hit(self):
-        zi_in = ZoneInfo("Europe/Dublin")
+        zi_in = self.klass("Europe/Dublin")
         pkl = pickle.dumps(zi_in)
         zi_rt = pickle.loads(pkl)
 
@@ -732,18 +742,18 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
             self.assertIs(zi_rt, zi_rt2)
 
     def test_cache_miss(self):
-        zi_in = ZoneInfo("Europe/Dublin")
+        zi_in = self.klass("Europe/Dublin")
         pkl = pickle.dumps(zi_in)
 
         del zi_in
-        ZoneInfo.clear_cache()  # Induce a cache miss
+        self.klass.clear_cache()  # Induce a cache miss
         zi_rt = pickle.loads(pkl)
         zi_rt2 = pickle.loads(pkl)
 
         self.assertIs(zi_rt, zi_rt2)
 
     def test_nocache(self):
-        zi_nocache = ZoneInfo.nocache("Europe/Dublin")
+        zi_nocache = self.klass.nocache("Europe/Dublin")
 
         pkl = pickle.dumps(zi_nocache)
         zi_rt = pickle.loads(pkl)
@@ -755,17 +765,17 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
         with self.subTest(test="Not a second unpickled object"):
             self.assertIsNot(zi_rt, zi_rt2)
 
-        zi_cache = ZoneInfo("Europe/Dublin")
+        zi_cache = self.klass("Europe/Dublin")
         with self.subTest(test="Not a cached object"):
             self.assertIsNot(zi_rt, zi_cache)
 
     def test_from_file(self):
         key = "Europe/Dublin"
         with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
-            zi_nokey = ZoneInfo.from_file(f)
+            zi_nokey = self.klass.from_file(f)
 
             f.seek(0)
-            zi_key = ZoneInfo.from_file(f, key=key)
+            zi_key = self.klass.from_file(f, key=key)
 
         test_cases = [
             (zi_key, "ZoneInfo with key"),
@@ -783,14 +793,14 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
         # from_file behavior, and that it is possible to interweave the
         # constructors of each of these and pickling/unpickling without issues.
         key = "Europe/Dublin"
-        zi = ZoneInfo(key)
+        zi = self.klass(key)
 
         pkl_0 = pickle.dumps(zi)
         zi_rt_0 = pickle.loads(pkl_0)
         self.assertIs(zi, zi_rt_0)
 
         with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
-            zi_ff = ZoneInfo.from_file(f, key=key)
+            zi_ff = self.klass.from_file(f, key=key)
 
         pkl_1 = pickle.dumps(zi)
         zi_rt_1 = pickle.loads(pkl_1)
