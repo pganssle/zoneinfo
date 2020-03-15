@@ -27,6 +27,7 @@ typedef struct {
 typedef struct {
     PyDateTime_TZInfo base;
     PyObject *key;
+    PyObject *file_repr;
     PyObject *weakreflist;
     unsigned int num_transitions;
     unsigned int num_ttinfos;
@@ -208,13 +209,16 @@ zoneinfo_dealloc(PyObject *obj_self)
     }
 
     Py_XDECREF(self->key);
+    Py_XDECREF(self->file_repr);
 }
 
 static PyObject *
 zoneinfo_from_file(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
     PyObject *file_obj = NULL;
+    PyObject *file_repr = NULL;
     PyObject *key = Py_None;
+    PyZoneInfo_ZoneInfo *self = NULL;
 
     static char *kwlist[] = {"fobj", "key", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|O", kwlist, &file_obj,
@@ -223,21 +227,30 @@ zoneinfo_from_file(PyTypeObject *type, PyObject *args, PyObject *kwargs)
     }
 
     PyObject *obj_self = (PyObject *)(type->tp_alloc(type, 0));
-    PyZoneInfo_ZoneInfo *self = (PyZoneInfo_ZoneInfo *)obj_self;
+    self = (PyZoneInfo_ZoneInfo *)obj_self;
     if (self == NULL) {
         return NULL;
     }
 
+    file_repr = PyUnicode_FromFormat("%R", file_obj);
+    if (file_repr == NULL) {
+        goto error;
+    }
+
     if (load_data(self, file_obj)) {
-        Py_DECREF(self);
-        return NULL;
+        goto error;
     }
 
     self->source = SOURCE_FILE;
+    self->file_repr = file_repr;
     self->key = key;
     Py_INCREF(key);
 
     return obj_self;
+error:
+    Py_XDECREF(file_repr);
+    Py_XDECREF(self);
+    return NULL;
 }
 
 static PyObject *
@@ -412,6 +425,35 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
         dt = tmp;
     }
     return dt;
+}
+
+static PyObject *
+zoneinfo_repr(PyZoneInfo_ZoneInfo *self)
+{
+    PyObject *rv = NULL;
+    const char *type_name = Py_TYPE((PyObject *)self)->tp_name;
+    if (!(self->key == Py_None)) {
+        rv = PyUnicode_FromFormat("%s(key=%R)", type_name, self->key);
+    }
+    else {
+        assert(PyUnicode_Check(self->file_repr));
+        rv = PyUnicode_FromFormat("%s.from_file(%U)", type_name,
+                                  self->file_repr);
+    }
+
+    return rv;
+}
+
+static PyObject *
+zoneinfo_str(PyZoneInfo_ZoneInfo *self)
+{
+    if (!(self->key == Py_None)) {
+        Py_INCREF(self->key);
+        return self->key;
+    }
+    else {
+        return zoneinfo_repr(self);
+    }
 }
 
 /* Pickles the ZoneInfo object by key and source.
@@ -601,6 +643,7 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
     self->trans_list_wall[1] = NULL;
     self->trans_ttinfos = NULL;
     self->_ttinfos = NULL;
+    self->file_repr = NULL;
 
     size_t ttinfos_allocated = 0;
 
@@ -1140,8 +1183,8 @@ static PyTypeObject PyZoneInfo_ZoneInfoType = {
     PyVarObject_HEAD_INIT(NULL, 0).tp_name = "zoneinfo._czoneinfo.ZoneInfo",
     .tp_basicsize = sizeof(PyZoneInfo_ZoneInfo),
     .tp_weaklistoffset = offsetof(PyZoneInfo_ZoneInfo, weakreflist),
-    /* .tp_repr = zoneinfo_repr, */
-    /* .tp_str = zoneinfo_str, */
+    .tp_repr = (reprfunc)zoneinfo_repr,
+    .tp_str = (reprfunc)zoneinfo_str,
     .tp_getattro = PyObject_GenericGetAttr,
     .tp_flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE),
     /* .tp_doc = zoneinfo_doc, */

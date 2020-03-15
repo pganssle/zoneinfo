@@ -297,9 +297,6 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
 class CZoneInfoTest(ZoneInfoTest):
     klass = c_zoneinfo.ZoneInfo
 
-    test_str = None
-    test_repr = None
-
     def load_transition_examples(self, key):
         # Support for datetimes after the last transition are not yet
         # supported, so we'll skip those examples for now.
