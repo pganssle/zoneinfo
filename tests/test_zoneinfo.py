@@ -299,7 +299,6 @@ class CZoneInfoTest(ZoneInfoTest):
 
     test_str = None
     test_repr = None
-    test_bad_zones = None
 
     def load_transition_examples(self, key):
         # Support for datetimes after the last transition are not yet
@@ -1252,9 +1251,6 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
 
 class CZoneInfoPickleTest(ZoneInfoPickleTest):
     klass = c_zoneinfo.ZoneInfo
-
-    test_from_file = None
-    test_pickle_after_from_file = None
 
 
 class TzPathTest(TzPathUserMixin, unittest.TestCase):

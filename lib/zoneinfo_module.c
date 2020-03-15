@@ -36,7 +36,7 @@ typedef struct {
     _ttinfo *ttinfo_before;
     _tzrule tzrule_after;
     _ttinfo *_ttinfos;  // Unique array of ttinfos for ease of deallocation
-    unsigned char from_cache;
+    unsigned char source;
 } PyZoneInfo_ZoneInfo;
 
 // Constants
@@ -47,6 +47,10 @@ static const int EPOCHORDINAL = 719163;
 static int DAYS_BEFORE_MONTH[] = {
     -1, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,
 };
+
+static const int SOURCE_NOCACHE = 0;
+static const int SOURCE_CACHE = 1;
+static const int SOURCE_FILE = 2;
 
 // Forward declarations
 static int
@@ -160,7 +164,7 @@ zoneinfo_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 
         instance = PyObject_CallMethod(ZONEINFO_WEAK_CACHE, "setdefault", "OO",
                                        key, tmp);
-        ((PyZoneInfo_ZoneInfo *)instance)->from_cache = 1;
+        ((PyZoneInfo_ZoneInfo *)instance)->source = SOURCE_CACHE;
 
         Py_DECREF(tmp);
 
@@ -207,6 +211,36 @@ zoneinfo_dealloc(PyObject *obj_self)
 }
 
 static PyObject *
+zoneinfo_from_file(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+{
+    PyObject *file_obj = NULL;
+    PyObject *key = Py_None;
+
+    static char *kwlist[] = {"fobj", "key", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|O", kwlist, &file_obj,
+                                     &key)) {
+        return NULL;
+    }
+
+    PyObject *obj_self = (PyObject *)(type->tp_alloc(type, 0));
+    PyZoneInfo_ZoneInfo *self = (PyZoneInfo_ZoneInfo *)obj_self;
+    if (self == NULL) {
+        return NULL;
+    }
+
+    if (load_data(self, file_obj)) {
+        Py_DECREF(self);
+        return NULL;
+    }
+
+    self->source = SOURCE_FILE;
+    self->key = key;
+    Py_INCREF(key);
+
+    return obj_self;
+}
+
+static PyObject *
 zoneinfo_nocache(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
     static char *kwlist[] = {"key", NULL};
@@ -217,7 +251,7 @@ zoneinfo_nocache(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 
     PyObject *out = zoneinfo_new_instance(cls, key);
     if (out != NULL) {
-        ((PyZoneInfo_ZoneInfo *)out)->from_cache = 0;
+        ((PyZoneInfo_ZoneInfo *)out)->source = SOURCE_NOCACHE;
     }
 
     return out;
@@ -395,14 +429,35 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
 static PyObject *
 zoneinfo_reduce(PyObject *obj_self)
 {
+    PyZoneInfo_ZoneInfo *self = (PyZoneInfo_ZoneInfo *)obj_self;
+    if (self->source == SOURCE_FILE) {
+        // Objects constructed from files cannot be pickled.
+        PyObject *pickle = PyImport_ImportModule("pickle");
+        if (pickle == NULL) {
+            return NULL;
+        }
+
+        PyObject *pickle_error =
+            PyObject_GetAttrString(pickle, "PicklingError");
+        Py_DECREF(pickle);
+        if (pickle_error == NULL) {
+            return NULL;
+        }
+
+        PyErr_Format(pickle_error,
+                     "Cannot pickle a ZoneInfo file from a file stream.");
+        Py_DECREF(pickle_error);
+        return NULL;
+    }
+
+    unsigned char from_cache = self->source == SOURCE_CACHE ? 1 : 0;
     PyObject *constructor = PyObject_GetAttrString(obj_self, "_unpickle");
 
     if (constructor == NULL) {
         return NULL;
     }
 
-    PyObject *rv =
-        Py_BuildValue("O(OB)", constructor, self->key, self->from_cache);
+    PyObject *rv = Py_BuildValue("O(OB)", constructor, self->key, from_cache);
     Py_DECREF(constructor);
     return rv;
 }
@@ -1059,6 +1114,9 @@ static PyMethodDef zoneinfo_methods[] = {
     {"nocache", (PyCFunction)zoneinfo_nocache,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Get a new instance of ZoneInfo, bypassing the cache.")},
+    {"from_file", (PyCFunction)zoneinfo_from_file,
+     METH_VARARGS | METH_KEYWORDS | METH_CLASS,
+     PyDoc_STR("Create a ZoneInfo file from a file object.")},
     {"utcoffset", (PyCFunction)zoneinfo_utcoffset, METH_O,
      PyDoc_STR("Retrieve a timedelta representing the UTC offset in a zone at "
                "the given datetime.")},
