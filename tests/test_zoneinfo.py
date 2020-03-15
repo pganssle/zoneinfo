@@ -1250,6 +1250,13 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
         self.assertIs(zi, zi_rt_2)
 
 
+class CZoneInfoPickleTest(ZoneInfoPickleTest):
+    klass = c_zoneinfo.ZoneInfo
+
+    test_from_file = None
+    test_pickle_after_from_file = None
+
+
 class TzPathTest(TzPathUserMixin, unittest.TestCase):
     module = zoneinfo
 

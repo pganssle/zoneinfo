@@ -380,6 +380,58 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
     return dt;
 }
 
+/* Pickles the ZoneInfo object by key and source.
+ *
+ * ZoneInfo objects are pickled by reference to the TZif file that they came
+ * from, which means that the exact transitions may be different or the file
+ * may not un-pickle if the data has changed on disk in the interim.
+ *
+ * It is necessary to include a bit indicating whether or not the object
+ * was constructed from the cache, because from-cache objects will hit the
+ * unpickling process's cache, whereas no-cache objects will bypass it.
+ *
+ * Objects constructed from ZoneInfo.from_file cannot be pickled.
+ */
+static PyObject *
+zoneinfo_reduce(PyObject *obj_self)
+{
+    PyObject *constructor = PyObject_GetAttrString(obj_self, "_unpickle");
+
+    if (constructor == NULL) {
+        return NULL;
+    }
+
+    PyObject *rv =
+        Py_BuildValue("O(OB)", constructor, self->key, self->from_cache);
+    Py_DECREF(constructor);
+    return rv;
+}
+
+static PyObject *
+zoneinfo__unpickle(PyTypeObject *cls, PyObject *args)
+{
+    PyObject *key;
+    unsigned char from_cache;
+    if (!PyArg_ParseTuple(args, "OB", &key, &from_cache)) {
+        return NULL;
+    }
+
+    if (from_cache) {
+        PyObject *val_args = Py_BuildValue("(O)", key);
+        if (val_args == NULL) {
+            return NULL;
+        }
+
+        PyObject *rv = zoneinfo_new(cls, val_args, NULL);
+
+        Py_DECREF(val_args);
+        return rv;
+    }
+    else {
+        return zoneinfo_new_instance(cls, key);
+    }
+}
+
 /* It is relatively expensive to construct new timedelta objects, and in most
  * cases we're looking at a relatively small number of timedeltas, such as
  * integer number of hours, etc. We will keep a cache so that we construct
@@ -1019,6 +1071,10 @@ static PyMethodDef zoneinfo_methods[] = {
     {"fromutc", (PyCFunction)zoneinfo_fromutc, METH_O,
      PyDoc_STR("Given a datetime with local time in UTC, retrieve an adjusted "
                "datetime in local time.")},
+    {"__reduce__", (PyCFunction)zoneinfo_reduce, METH_NOARGS,
+     PyDoc_STR("Function for serialization with the pickle protocol.")},
+    {"_unpickle", (PyCFunction)zoneinfo__unpickle, METH_VARARGS | METH_CLASS,
+     PyDoc_STR("Private method used in unpickling.")},
     {NULL} /* Sentinel */
 };
 
