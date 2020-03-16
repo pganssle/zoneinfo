@@ -84,7 +84,7 @@ def load_data(fobj):
                 break
             tz_bytes += c
 
-        tz_str = tz_bytes.decode()
+        tz_str = tz_bytes
     else:
         tz_str = None
 
