@@ -92,6 +92,35 @@ class TzPathUserMixin:
         super().setUp()
 
 
+class DatetimeSubclassMixin:
+    """
+    Replaces all ZoneTransition transition dates with a datetime subclass.
+    """
+
+    class DatetimeSubclass(datetime):
+        @classmethod
+        def from_datetime(cls, dt):
+            return cls(
+                dt.year,
+                dt.month,
+                dt.day,
+                dt.hour,
+                dt.minute,
+                dt.second,
+                dt.microsecond,
+                tzinfo=dt.tzinfo,
+                fold=dt.fold,
+            )
+
+    def load_transition_examples(self, key):
+        transition_examples = super().load_transition_examples(key)
+        for zt in transition_examples:
+            dt = zt.transition
+            new_dt = self.DatetimeSubclass.from_datetime(dt)
+            new_zt = dataclasses.replace(zt, transition=new_dt)
+            yield new_zt
+
+
 class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
     klass = py_zoneinfo.ZoneInfo
     class_name = "ZoneInfo"
@@ -345,6 +374,14 @@ class CZoneInfoTest(ZoneInfoTest):
 
                 self.assertEqual(dt_fromutc.fold, 1)
                 self.assertEqual(dt.fold, 0)
+
+
+class ZoneInfoDatetimeSubclassTest(DatetimeSubclassMixin, ZoneInfoTest):
+    pass
+
+
+class CZoneInfoDatetimeSubclassTest(DatetimeSubclassMixin, CZoneInfoTest):
+    pass
 
 
 class ZoneInfoTestSubclass(ZoneInfoTest):
