@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -8,6 +9,8 @@
 PyObject *io_open = NULL;
 PyObject *_tzpath_find_tzfile = NULL;
 PyObject *_common_mod = NULL;
+
+typedef struct TransitionRuleType TransitionRuleType;
 
 typedef struct {
     PyObject *utcoff;
@@ -20,8 +23,9 @@ typedef struct {
     _ttinfo std;
     _ttinfo dst;
     int dst_diff;
-    PyObject *start;
-    PyObject *end;
+    TransitionRuleType *start;
+    TransitionRuleType *end;
+    unsigned char std_only;
 } _tzrule;
 
 typedef struct {
@@ -40,11 +44,38 @@ typedef struct {
     unsigned char source;
 } PyZoneInfo_ZoneInfo;
 
+struct TransitionRuleType {
+    int64_t (*year_to_timestamp)(TransitionRuleType *, int);
+};
+
+typedef struct {
+    TransitionRuleType base;
+    uint8_t month;
+    uint8_t week;
+    uint8_t day;
+    int8_t hour;
+    int8_t minute;
+    int8_t second;
+} CalendarRule;
+
+typedef struct {
+    TransitionRuleType base;
+    uint8_t julian;
+    unsigned int day;
+    int8_t hour;
+    int8_t minute;
+    int8_t second;
+} DayRule;
+
 // Constants
 static PyObject *ZONEINFO_WEAK_CACHE = NULL;
 static PyObject *TIMEDELTA_CACHE = NULL;
 
 static const int EPOCHORDINAL = 719163;
+static int DAYS_IN_MONTH[] = {
+    -1, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+};
+
 static int DAYS_BEFORE_MONTH[] = {
     -1, 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,
 };
@@ -63,10 +94,38 @@ utcoff_to_dstoff(size_t *trans_idx, long *utcoffs, long *dstoffs,
 static int
 ts_to_local(size_t *trans_idx, int64_t *trans_utc, long *utcoff,
             int64_t *trans_local[2], size_t num_transitions);
+
+static int
+parse_tz_str(PyObject *tz_str_obj, _tzrule *out);
+
+static ssize_t
+parse_abbr(const char *const p, PyObject **abbr);
+static ssize_t
+parse_tz_delta(const char *const p, long *total_seconds);
+static ssize_t
+parse_transition_time(const char *const p, int8_t *hour, int8_t *minute,
+                      int8_t *second);
+static ssize_t
+parse_transition_rule(const char *const p, TransitionRuleType **out);
+
+static _ttinfo *
+find_tzrule_ttinfo(_tzrule *rule, int64_t ts, unsigned char fold, int year);
+static _ttinfo *
+find_tzrule_ttinfo_fromutc(_tzrule *rule, int64_t ts, int year,
+                           unsigned char *fold);
+
 static int
 build_ttinfo(long utcoffset, long dstoffset, PyObject *tzname, _ttinfo *out);
 static void
 xdecref_ttinfo(_ttinfo *ttinfo);
+
+static int
+build_tzrule(PyObject *std_abbr, PyObject *dst_abbr, long std_offset,
+             long dst_offset, TransitionRuleType *start,
+             TransitionRuleType *end, _tzrule *out);
+static void
+free_tzrule(_tzrule *tzrule);
+
 static PyObject *
 load_timedelta(long seconds);
 
@@ -208,6 +267,8 @@ zoneinfo_dealloc(PyObject *obj_self)
         PyMem_Free(self->trans_ttinfos);
     }
 
+    free_tzrule(&(self->tzrule_after));
+
     Py_XDECREF(self->key);
     Py_XDECREF(self->file_repr);
 }
@@ -314,8 +375,6 @@ zoneinfo_tzname(PyObject *self, PyObject *dt)
 #define GET_DT_TZINFO(p) \
     (HASTZINFO(p) ? ((PyDateTime_DateTime *)(p))->tzinfo : Py_None)
 
-#define TZRULE_STATIC(p) ((p).start == NULL)
-
 static PyObject *
 zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
 {
@@ -345,15 +404,30 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
     if (num_trans >= 1 && timestamp < self->trans_list_utc[0]) {
         tti = self->ttinfo_before;
     }
-    else if ((num_trans == 0 ||
-              timestamp > self->trans_list_utc[num_trans - 1]) &&
-             !TZRULE_STATIC(self->tzrule_after)) {
-        PyErr_Format(PyExc_NotImplementedError,
-                     "Dates after the final transition not yet supported");
-        return NULL;
-    }
-    else if (num_trans == 0) {
-        tti = &self->tzrule_after.std;
+    else if (num_trans == 0 ||
+             timestamp > self->trans_list_utc[num_trans - 1]) {
+        tti = find_tzrule_ttinfo_fromutc(&(self->tzrule_after), timestamp,
+                                         PyDateTime_GET_YEAR(dt), &fold);
+
+        // Immediately after the last manual transition, the fold/gap is
+        // between self->trans_ttinfos[num_transitions - 1] and whatever
+        // ttinfo applies immediately after the last transition, not between
+        // the STD and DST rules in the tzrule_after, so we may need to
+        // adjust the fold value.
+        if (num_trans) {
+            _ttinfo *tti_prev = NULL;
+            if (num_trans == 1) {
+                tti_prev = self->ttinfo_before;
+            }
+            else {
+                tti_prev = self->trans_ttinfos[num_trans - 2];
+            }
+            int64_t diff = tti_prev->utcoff_seconds - tti->utcoff_seconds;
+            if (diff > 0 &&
+                timestamp < (self->trans_list_utc[num_trans - 1] + diff)) {
+                fold = 1;
+            }
+        }
     }
     else {
         size_t idx = _bisect(timestamp, self->trans_list_utc, num_trans);
@@ -362,11 +436,6 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
         if (idx >= 2) {
             tti_prev = self->trans_ttinfos[idx - 2];
             tti = self->trans_ttinfos[idx - 1];
-        }
-        else if (idx == num_trans) {
-            // We'll only hit this branch if tzrule_after is static
-            tti_prev = self->trans_ttinfos[num_trans - 1];
-            tti = &self->tzrule_after.std;
         }
         else {
             tti_prev = self->ttinfo_before;
@@ -678,6 +747,11 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
         goto error;
     }
 
+    PyObject *tz_str = PyTuple_GetItem(data_tuple, 5);
+    if (tz_str == NULL) {
+        goto error;
+    }
+
     // Load the relevant sizes
     Py_ssize_t num_transitions = PyTuple_Size(trans_utc);
     if (num_transitions == -1) {
@@ -808,6 +882,41 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
         self->ttinfo_before = &(self->_ttinfos[0]);
     }
 
+    if (tz_str != Py_None && PyObject_IsTrue(tz_str)) {
+        if (parse_tz_str(tz_str, &(self->tzrule_after))) {
+            goto error;
+        }
+    }
+    else {
+        if (!self->num_ttinfos) {
+            PyErr_Format(PyExc_ValueError, "No time zone information found.");
+            goto error;
+        }
+
+        size_t idx;
+        if (!self->num_transitions) {
+            idx = self->num_ttinfos - 1;
+        }
+        else {
+            idx = trans_idx[self->num_transitions - 1];
+        }
+
+        _ttinfo *tti = &(self->_ttinfos[idx]);
+        build_tzrule(tti->tzname, NULL, tti->utcoff_seconds, 0, NULL, NULL,
+                     &(self->tzrule_after));
+
+        // We've abused the build_tzrule constructor to construct an STD-only
+        // rule mimicking whatever ttinfo we've picked up, but it's possible
+        // that the one we've picked up is a DST zone, so we need to make sure
+        // that the dstoff is set correctly in that case.
+        if (PyObject_IsTrue(tti->dstoff)) {
+            _ttinfo *tti_after = &(self->tzrule_after.std);
+            Py_DECREF(tti_after->dstoff);
+            tti_after->dstoff = tti->dstoff;
+            Py_INCREF(tti_after->dstoff);
+        }
+    }
+
     int rv = 0;
     goto cleanup;
 error:
@@ -860,6 +969,804 @@ cleanup:
     }
 
     return rv;
+}
+
+/* Function to calculate the local timestamp of a transition from the year. */
+int64_t
+calendarrule_year_to_timestamp(TransitionRuleType *base_self, int year)
+{
+    CalendarRule *self = (CalendarRule *)base_self;
+
+    // We want (year, month, day of month); we have year and month, but we
+    // need to turn (week, day-of-week) into day-of-month
+    //
+    // Week 1 is the first week in which day `day` (where 0 = Sunday) appears.
+    // Week 5 represents the last occurrence of day `day`, so we need to know
+    // the first weekday of the month and the number of days in the month.
+    int8_t first_day = (ymd_to_ord(year, self->month, 1) + 6) % 7;
+    uint8_t days_in_month = DAYS_IN_MONTH[self->month];
+    if (self->month == 2 && is_leap_year(year)) {
+        days_in_month += 1;
+    }
+
+    // This equation seems magical, so I'll break it down:
+    // 1. calendar says 0 = Monday, POSIX says 0 = Sunday so we need first_day
+    //    + 1 to get 1 = Monday -> 7 = Sunday, which is still equivalent
+    //    because this math is mod 7
+    // 2. Get first day - desired day mod 7 (adjusting by 7 for negative
+    //    numbers so that -1 % 7 = 6).
+    // 3. Add 1 because month days are a 1-based index.
+    int8_t month_day = ((int8_t)(self->day) - (first_day + 1)) % 7;
+    if (month_day < 0) {
+        month_day += 7;
+    }
+    month_day += 1;
+
+    // Now use a 0-based index version of `week` to calculate the w-th
+    // occurrence of `day`
+    month_day += ((int8_t)(self->week) - 1) * 7;
+
+    // month_day will only be > days_in_month if w was 5, and `w` means "last
+    // occurrence of `d`", so now we just check if we over-shot the end of the
+    // month and if so knock off 1 week.
+    if (month_day > days_in_month) {
+        month_day -= 7;
+    }
+
+    int64_t ordinal = ymd_to_ord(year, self->month, month_day) - EPOCHORDINAL;
+    return ((ordinal * 86400) + (int64_t)(self->hour * 3600) +
+            (int64_t)(self->minute * 60) + (int64_t)(self->second));
+}
+
+/* Constructor for CalendarRule. */
+int
+calendarrule_new(uint8_t month, uint8_t week, uint8_t day, int8_t hour,
+                 int8_t minute, int8_t second, CalendarRule *out)
+{
+    // These bounds come from the POSIX standard, which describes an Mm.n.d
+    // rule as:
+    //
+    //   The d'th day (0 <= d <= 6) of week n of month m of the year (1 <= n <=
+    //   5, 1 <= m <= 12, where week 5 means "the last d day in month m" which
+    //   may occur in either the fourth or the fifth week). Week 1 is the first
+    //   week in which the d'th day occurs. Day zero is Sunday.
+    if (month <= 0 || month > 12) {
+        PyErr_Format(PyExc_ValueError, "Month must be in (0, 12]");
+        return -1;
+    }
+
+    if (week <= 0 || week > 5) {
+        PyErr_Format(PyExc_ValueError, "Week must be in (0, 5]");
+        return -1;
+    }
+
+    if (day < 0 || day > 6) {
+        PyErr_Format(PyExc_ValueError, "Day must be in [0, 6]");
+        return -1;
+    }
+
+    TransitionRuleType base = {&calendarrule_year_to_timestamp};
+
+    CalendarRule new_offset = {
+        .base = base,
+        .month = month,
+        .week = week,
+        .day = day,
+        .hour = hour,
+        .minute = minute,
+        .second = second,
+    };
+
+    *out = new_offset;
+    return 0;
+}
+
+/* Function to calculate the local timestamp of a transition from the year.
+ *
+ * This translates the day of the year into a local timestamp — either a
+ * 1-based Julian day, not including leap days, or the 0-based year-day,
+ * including leap days.
+ * */
+int64_t
+dayrule_year_to_timestamp(TransitionRuleType *base_self, int year)
+{
+    // The function signature requires a TransitionRuleType pointer, but this
+    // function is only applicable to DayRule* objects.
+    DayRule *self = (DayRule *)base_self;
+
+    // ymd_to_ord calculates the number of days since 0001-01-01, but we want
+    // to know the number of days since 1970-01-01, so we must subtract off
+    // the equivalent of ymd_to_ord(1970, 1, 1).
+    //
+    // We subtract off an additional 1 day to account for January 1st (we want
+    // the number of full days *before* the date of the transition - partial
+    // days are accounted for in the hour, minute and second portions.
+    int64_t days_before_year = ymd_to_ord(year, 1, 1) - EPOCHORDINAL - 1;
+
+    // The Julian day specification skips over February 29th in leap years,
+    // from the POSIX standard:
+    //
+    //   Leap days shall not be counted. That is, in all years-including leap
+    //   years-February 28 is day 59 and March 1 is day 60. It is impossible to
+    //   refer explicitly to the occasional February 29.
+    //
+    // This is actually more useful than you'd think — if you want a rule that
+    // always transitions on a given calendar day (other than February 29th),
+    // you would use a Julian day, e.g. J91 always refers to April 1st and J365
+    // always refers to December 31st.
+    unsigned int day = self->day;
+    if (self->julian && day >= 59 && is_leap_year(year)) {
+        day += 1;
+    }
+
+    return ((days_before_year + day) * 86400) + (self->hour * 3600) +
+           (self->minute * 60) + self->second;
+}
+
+/* Constructor for DayRule. */
+static int
+dayrule_new(uint8_t julian, unsigned int day, int8_t hour, int8_t minute,
+            int8_t second, DayRule *out)
+{
+    // The POSIX standard specifies that Julian days must be in the range (1 <=
+    // n <= 365) and that non-Julian (they call it "0-based Julian") days must
+    // be in the range (0 <= n <= 365).
+    if (day < julian || day > 365) {
+        PyErr_Format(PyExc_ValueError, "day must be in [%u, 365], not: %u",
+                     julian, day);
+        return -1;
+    }
+
+    TransitionRuleType base = {
+        &dayrule_year_to_timestamp,
+    };
+
+    DayRule tmp = {
+        .base = base,
+        .julian = julian,
+        .day = day,
+        .hour = hour,
+        .minute = minute,
+        .second = second,
+    };
+
+    *out = tmp;
+
+    return 0;
+}
+
+/* Calculate the start and end rules for a _tzrule in the given year. */
+static void
+tzrule_transitions(_tzrule *rule, int year, int64_t *start, int64_t *end)
+{
+    assert(rule->start != NULL);
+    assert(rule->end != NULL);
+    *start = rule->start->year_to_timestamp(rule->start, year);
+    *end = rule->end->year_to_timestamp(rule->end, year);
+}
+
+/* Calculate the _ttinfo that applies at a given local time from a _tzrule.
+ *
+ * This takes a local timestamp and fold for disambiguation purposes; the year
+ * could technically be calculated from the timestamp, but given that the
+ * callers of this function already have the year information accessible from
+ * the datetime struct, it is taken as an additional parameter to reduce
+ * unncessary calculation.
+ * */
+static _ttinfo *
+find_tzrule_ttinfo(_tzrule *rule, int64_t ts, unsigned char fold, int year)
+{
+    if (rule->std_only) {
+        return &(rule->std);
+    }
+
+    int64_t start, end;
+    uint8_t isdst;
+
+    tzrule_transitions(rule, year, &start, &end);
+
+    // With fold = 0, the period (denominated in local time) with the smaller
+    // offset starts at the end of the gap and ends at the end of the fold;
+    // with fold = 1, it runs from the start of the gap to the beginning of the
+    // fold.
+    //
+    // So in order to determine the DST boundaries we need to know both the
+    // fold and whether DST is positive or negative (rare), and it turns out
+    // that this boils down to fold XOR is_positive.
+    if (fold == (rule->dst_diff >= 0)) {
+        end -= rule->dst_diff;
+    }
+    else {
+        start += rule->dst_diff;
+    }
+
+    if (start < end) {
+        isdst = (ts >= start) && (ts < end);
+    }
+    else {
+        isdst = (ts < end) || (ts >= start);
+    }
+
+    if (isdst) {
+        return &(rule->dst);
+    }
+    else {
+        return &(rule->std);
+    }
+}
+
+/* Calculate the ttinfo and fold that applies for a _tzrule at an epoch time.
+ *
+ * This function can determine the _ttinfo that applies at a given epoch time,
+ * (analogous to trans_list_utc), and whether or not the datetime is in a fold.
+ * This is to be used in the .fromutc() function.
+ *
+ * The year is technically a redundant parameter, because it can be calculated
+ * from the timestamp, but all callers of this function should have the year
+ * in the datetime struct anyway, so taking it as a parameter saves unnecessary
+ * calculation.
+ **/
+static _ttinfo *
+find_tzrule_ttinfo_fromutc(_tzrule *rule, int64_t ts, int year,
+                           unsigned char *fold)
+{
+    if (rule->std_only) {
+        *fold = 0;
+        return &(rule->std);
+    }
+
+    int64_t start, end;
+    uint8_t isdst;
+    tzrule_transitions(rule, year, &start, &end);
+    start -= rule->std.utcoff_seconds;
+    end -= rule->dst.utcoff_seconds;
+
+    if (start < end) {
+        isdst = (ts >= start) && (ts < end);
+    }
+    else {
+        isdst = (ts < end) || (ts >= start);
+    }
+
+    // For positive DST, the ambiguous period is one dst_diff after the end of
+    // DST; for negative DST, the ambiguous period is one dst_diff before the
+    // start of DST.
+    int64_t ambig_start, ambig_end;
+    if (rule->dst_diff > 0) {
+        ambig_start = end;
+        ambig_end = end + rule->dst_diff;
+    }
+    else {
+        ambig_start = start;
+        ambig_end = start - rule->dst_diff;
+    }
+
+    *fold = (ts >= ambig_start) && (ts < ambig_end);
+
+    if (isdst) {
+        return &(rule->dst);
+    }
+    else {
+        return &(rule->std);
+    }
+}
+
+/* Parse a TZ string in the format specified by the POSIX standard:
+ *
+ *  std offset[dst[offset],start[/time],end[/time]]
+ *
+ *  std and dst must be 3 or more characters long and must not contain a
+ *  leading colon, embedded digits, commas, nor a plus or minus signs; The
+ *  spaces between "std" and "offset" are only for display and are not actually
+ *  present in the string.
+ *
+ *  The format of the offset is ``[+|-]hh[:mm[:ss]]``
+ *
+ * See the POSIX.1 spec: IEE Std 1003.1-2018 §8.3:
+ *
+ * https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap08.html
+ */
+static int
+parse_tz_str(PyObject *tz_str_obj, _tzrule *out)
+{
+    PyObject *std_abbr = NULL;
+    PyObject *dst_abbr = NULL;
+    TransitionRuleType *start = NULL;
+    TransitionRuleType *end = NULL;
+    long std_offset, dst_offset;
+
+    char *tz_str = PyBytes_AsString(tz_str_obj);
+    if (tz_str == NULL) {
+        return -1;
+    }
+    char *p = tz_str;
+
+    // Read the `std` abbreviation, which must be at least 3 characters long.
+    ssize_t num_chars = parse_abbr(p, &std_abbr);
+    if (num_chars < 1) {
+        PyErr_Format(PyExc_ValueError, "Invalid STD format in %R", tz_str_obj);
+        goto error;
+    }
+
+    p += num_chars;
+
+    // Now read the STD offset, which is required
+    num_chars = parse_tz_delta(p, &std_offset);
+    if (num_chars < 0) {
+        PyErr_Format(PyExc_ValueError, "Invalid STD offset in %R", tz_str_obj);
+        goto error;
+    }
+    p += num_chars;
+
+    // If the string ends here, there is no DST, otherwise we must parse the
+    // DST abbreviation and start and end dates and times.
+    if (*p == '\0') {
+        goto complete;
+    }
+
+    num_chars = parse_abbr(p, &dst_abbr);
+    if (num_chars < 1) {
+        PyErr_Format(PyExc_ValueError, "Invalid DST format in %R", tz_str_obj);
+        goto error;
+    }
+    p += num_chars;
+
+    if (*p == ',') {
+        // From the POSIX standard:
+        //
+        // If no offset follows dst, the alternative time is assumed to be one
+        // hour ahead of standard time.
+        dst_offset = std_offset + 3600;
+    }
+    else {
+        num_chars = parse_tz_delta(p, &dst_offset);
+        if (num_chars < 0) {
+            PyErr_Format(PyExc_ValueError, "Invalid DST offset in %R",
+                         tz_str_obj);
+            goto error;
+        }
+
+        p += num_chars;
+    }
+
+    TransitionRuleType **transitions[2] = {&start, &end};
+    for (size_t i = 0; i < 2; ++i) {
+        if (*p != ',') {
+            PyErr_Format(PyExc_ValueError,
+                         "Missing transition rules in TZ string: %R",
+                         tz_str_obj);
+            goto error;
+        }
+        p++;
+
+        num_chars = parse_transition_rule(p, transitions[i]);
+        if (num_chars < 0) {
+            PyErr_Format(PyExc_ValueError,
+                         "Malformed transition rule in TZ string: %R",
+                         tz_str_obj);
+            goto error;
+        }
+        p += num_chars;
+    }
+
+    if (*p != '\0') {
+        PyErr_Format(PyExc_ValueError,
+                     "Extraneous characters at end of TZ string: %R",
+                     tz_str_obj);
+        goto error;
+    }
+
+complete:
+    build_tzrule(std_abbr, dst_abbr, std_offset, dst_offset, start, end, out);
+    Py_DECREF(std_abbr);
+    Py_XDECREF(dst_abbr);
+
+    return 0;
+error:
+    Py_XDECREF(std_abbr);
+    if (dst_abbr != NULL && dst_abbr != Py_None) {
+        Py_DECREF(dst_abbr);
+    }
+
+    if (start != NULL) {
+        PyMem_Free(start);
+    }
+
+    if (end != NULL) {
+        PyMem_Free(end);
+    }
+
+    return -1;
+}
+
+static ssize_t
+parse_uint(const char *const p)
+{
+    if (!isdigit(*p)) {
+        return -1;
+    }
+
+    return (*p) - '0';
+}
+
+/* Parse the STD and DST abbreviations from a TZ string. */
+static ssize_t
+parse_abbr(const char *const p, PyObject **abbr)
+{
+    const char *ptr = p;
+    char buff = *ptr;
+    const char *str_start;
+    const char *str_end;
+
+    if (*ptr == '<') {
+        ptr++;
+        str_start = ptr;
+        while ((buff = *ptr) != '>') {
+            // From the POSIX standard:
+            //
+            //   In the quoted form, the first character shall be the less-than
+            //   ( '<' ) character and the last character shall be the
+            //   greater-than ( '>' ) character. All characters between these
+            //   quoting characters shall be alphanumeric characters from the
+            //   portable character set in the current locale, the plus-sign (
+            //   '+' ) character, or the minus-sign ( '-' ) character. The std
+            //   and dst fields in this case shall not include the quoting
+            //   characters.
+            if (!isalpha(buff) && !isdigit(buff) && buff != '+' &&
+                buff != '-') {
+                return -1;
+            }
+            ptr++;
+        }
+        str_end = ptr;
+        ptr++;
+    }
+    else {
+        str_start = p;
+        // From the POSIX standard:
+        //
+        //   In the unquoted form, all characters in these fields shall be
+        //   alphabetic characters from the portable character set in the
+        //   current locale.
+        while (isalpha(*ptr)) {
+            ptr++;
+        }
+        str_end = ptr;
+    }
+
+    *abbr = PyUnicode_FromStringAndSize(str_start, str_end - str_start);
+    if (abbr == NULL) {
+        return -1;
+    }
+
+    return ptr - p;
+}
+
+/* Parse a UTC offset from a TZ str. */
+static ssize_t
+parse_tz_delta(const char *const p, long *total_seconds)
+{
+    // From the POSIX spec:
+    //
+    //   Indicates the value added to the local time to arrive at Coordinated
+    //   Universal Time. The offset has the form:
+    //
+    //   hh[:mm[:ss]]
+    //
+    //   One or more digits may be used; the value is always interpreted as a
+    //   decimal number.
+    //
+    // The POSIX spec says that the values for `hour` must be between 0 and 24
+    // hours, but RFC 8536 §3.3.1 specifies that the hours part of the
+    // transition times may be signed and range from -167 to 167.
+    long sign = -1;
+    long hours = 0;
+    long minutes = 0;
+    long seconds = 0;
+
+    const char *ptr = p;
+    char buff = *ptr;
+    if (buff == '-' || buff == '+') {
+        // Negative numbers correspond to *positive* offsets, from the spec:
+        //
+        //   If preceded by a '-', the timezone shall be east of the Prime
+        //   Meridian; otherwise, it shall be west (which may be indicated by
+        //   an optional preceding '+' ).
+        if (buff == '-') {
+            sign = 1;
+        }
+
+        ptr++;
+    }
+
+    // The hour can be 1 or 2 numeric characters
+    for (size_t i = 0; i < 2; ++i) {
+        buff = *ptr;
+        if (!isdigit(buff)) {
+            if (i == 0) {
+                return -1;
+            }
+            else {
+                break;
+            }
+        }
+
+        hours *= 10;
+        hours += buff - '0';
+        ptr++;
+    }
+
+    if (hours > 24 || hours < 0) {
+        return -1;
+    }
+
+    // Minutes and seconds always of the format ":dd"
+    long *outputs[2] = {&minutes, &seconds};
+    for (size_t i = 0; i < 2; ++i) {
+        if (*ptr != ':') {
+            goto complete;
+        }
+        ptr++;
+
+        for (size_t j = 0; j < 2; ++j) {
+            buff = *ptr;
+            if (!isdigit(buff)) {
+                return -1;
+            }
+            *(outputs[i]) *= 10;
+            *(outputs[i]) += buff - '0';
+            ptr++;
+        }
+    }
+
+complete:
+    *total_seconds = sign * ((hours * 3600) + (minutes * 60) + seconds);
+
+    return ptr - p;
+}
+
+/* Parse the date portion of a transition rule. */
+static ssize_t
+parse_transition_rule(const char *const p, TransitionRuleType **out)
+{
+    // The full transition rule indicates when to change back and forth between
+    // STD and DST, and has the form:
+    //
+    //   date[/time],date[/time]
+    //
+    // This function parses an individual date[/time] section, and returns
+    // the number of characters that contributed to the transition rule. This
+    // does not include the ',' at the end of the first rule.
+    //
+    // The POSIX spec states that if *time* is not given, the default is 02:00.
+    const char *ptr = p;
+    int8_t hour = 2;
+    int8_t minute = 0;
+    int8_t second = 0;
+
+    // Rules come in one of three flavors:
+    //
+    //   1. Jn: Julian day n, with no leap days.
+    //   2. n: Day of year (0-based, with leap days)
+    //   3. Mm.n.d: Specifying by month, week and day-of-week.
+
+    if (*ptr == 'M') {
+        uint8_t month, week, day;
+        ptr++;
+        ssize_t tmp = parse_uint(ptr);
+        if (tmp < 0) {
+            return -1;
+        }
+        month = (uint8_t)tmp;
+        ptr++;
+        if (*ptr != '.') {
+            tmp = parse_uint(ptr);
+            if (tmp < 0) {
+                return -1;
+            }
+
+            month *= 10;
+            month += (uint8_t)tmp;
+            ptr++;
+        }
+
+        uint8_t *values[2] = {&week, &day};
+        for (size_t i = 0; i < 2; ++i) {
+            if (*ptr != '.') {
+                return -1;
+            }
+            ptr++;
+
+            tmp = parse_uint(ptr);
+            if (tmp < 0) {
+                return -1;
+            }
+            ptr++;
+
+            *(values[i]) = tmp;
+        }
+
+        if (*ptr == '/') {
+            ptr++;
+            ssize_t num_chars =
+                parse_transition_time(ptr, &hour, &minute, &second);
+            if (num_chars < 0) {
+                return -1;
+            }
+            ptr += num_chars;
+        }
+
+        CalendarRule *rv = PyMem_Calloc(1, sizeof(CalendarRule));
+        if (rv == NULL) {
+            return -1;
+        }
+
+        if (calendarrule_new(month, week, day, hour, minute, second, rv)) {
+            PyMem_Free(rv);
+            return -1;
+        }
+
+        *out = (TransitionRuleType *)rv;
+    }
+    else {
+        uint8_t julian = 0;
+        unsigned int day = 0;
+        if (*ptr == 'J') {
+            julian = 1;
+            ptr++;
+        }
+
+        for (size_t i = 0; i < 3; ++i) {
+            if (!isdigit(*ptr)) {
+                if (i == 0) {
+                    return -1;
+                }
+                break;
+            }
+            day *= 10;
+            day += (*ptr) - '0';
+            ptr++;
+        }
+
+        if (*ptr == '/') {
+            ptr++;
+            ssize_t num_chars =
+                parse_transition_time(ptr, &hour, &minute, &second);
+            if (num_chars < 0) {
+                return -1;
+            }
+            ptr += num_chars;
+        }
+
+        DayRule *rv = PyMem_Calloc(1, sizeof(DayRule));
+        if (rv == NULL) {
+            return -1;
+        }
+
+        if (dayrule_new(julian, day, hour, minute, second, rv)) {
+            PyMem_Free(rv);
+            return -1;
+        }
+        *out = (TransitionRuleType *)rv;
+    }
+
+    return ptr - p;
+}
+
+/* Parse the time portion of a transition rule (e.g. following an /) */
+static ssize_t
+parse_transition_time(const char *const p, int8_t *hour, int8_t *minute,
+                      int8_t *second)
+{
+    // From the spec:
+    //
+    //   The time has the same format as offset except that no leading sign
+    //   ( '-' or '+' ) is allowed.
+    //
+    // The format for the offset is:
+    //
+    //   h[h][:mm[:ss]]
+    //
+    // RFC 8536 also allows transition times to be signed and to range from
+    // -167 to +167, but the current version only supports [0, 99].
+    //
+    // TODO: Support the full range of transition hours.
+    int8_t *components[3] = {hour, minute, second};
+    const char *ptr = p;
+    int8_t sign = 1;
+
+    if (*ptr == '-' || *ptr == '+') {
+        if (*ptr == '-') {
+            sign = -1;
+        }
+        ptr++;
+    }
+
+    for (size_t i = 0; i < 3; ++i) {
+        if (i > 0) {
+            if (*ptr != ':') {
+                break;
+            }
+            ptr++;
+        }
+
+        uint8_t buff = 0;
+        for (size_t j = 0; j < 2; j++) {
+            if (!isdigit(*ptr)) {
+                if (i == 0 && j > 0) {
+                    break;
+                }
+                return -1;
+            }
+
+            buff *= 10;
+            buff += (*ptr) - '0';
+            ptr++;
+        }
+
+        *(components[i]) = sign * buff;
+    }
+
+    return ptr - p;
+}
+
+/* Constructor for a _tzrule.
+ *
+ * If `dst_abbr` is NULL, this will construct an "STD-only" _tzrule, in which
+ * case `dst_offset` will be ignored and `start` and `end` are expected to be
+ * NULL as well.
+ *
+ * Returns 0 on success.
+ */
+static int
+build_tzrule(PyObject *std_abbr, PyObject *dst_abbr, long std_offset,
+             long dst_offset, TransitionRuleType *start,
+             TransitionRuleType *end, _tzrule *out)
+{
+    _tzrule rv = {0};
+
+    rv.start = start;
+    rv.end = end;
+
+    if (build_ttinfo(std_offset, 0, std_abbr, &rv.std)) {
+        goto error;
+    }
+
+    if (dst_abbr != NULL) {
+        rv.dst_diff = dst_offset - std_offset;
+        if (build_ttinfo(dst_offset, rv.dst_diff, dst_abbr, &rv.dst)) {
+            goto error;
+        }
+    }
+    else {
+        rv.std_only = 1;
+    }
+
+    *out = rv;
+
+    return 0;
+error:
+    xdecref_ttinfo(&rv.std);
+    xdecref_ttinfo(&rv.dst);
+    return -1;
+}
+
+/* Destructor for _tzrule. */
+static void
+free_tzrule(_tzrule *tzrule)
+{
+    xdecref_ttinfo(&(tzrule->std));
+    if (!tzrule->std_only) {
+        xdecref_ttinfo(&(tzrule->dst));
+    }
+
+    if (tzrule->start != NULL) {
+        PyMem_Free(tzrule->start);
+    }
+
+    if (tzrule->end != NULL) {
+        PyMem_Free(tzrule->end);
+    }
 }
 
 /* Calculate DST offsets from transitions and UTC offsets
@@ -1040,14 +1947,14 @@ find_ttinfo(PyZoneInfo_ZoneInfo *self, PyObject *dt)
     unsigned char fold = PyDateTime_DATE_GET_FOLD(dt);
     assert(fold < 2);
     int64_t *local_transitions = self->trans_list_wall[fold];
+    size_t num_trans = self->num_transitions;
 
-    if (ts < local_transitions[0]) {
+    if (num_trans && ts < local_transitions[0]) {
         return self->ttinfo_before;
     }
-    else if (ts > local_transitions[self->num_transitions - 1]) {
-        PyErr_Format(PyExc_NotImplementedError,
-                     "Dates beyond the last transition not yet implemented.");
-        return NULL;
+    else if (!num_trans || ts > local_transitions[self->num_transitions - 1]) {
+        return find_tzrule_ttinfo(&(self->tzrule_after), ts, fold,
+                                  PyDateTime_GET_YEAR(dt));
     }
     else {
         size_t idx = _bisect(ts, local_transitions, self->num_transitions) - 1;

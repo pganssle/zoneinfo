@@ -297,20 +297,6 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
 class CZoneInfoTest(ZoneInfoTest):
     klass = c_zoneinfo.ZoneInfo
 
-    def load_transition_examples(self, key):
-        # Support for datetimes after the last transition are not yet
-        # supported, so we'll skip those examples for now.
-        epoch = datetime(1970, 1, 1)
-        max_offset_32 = timedelta(seconds=2 ** 31)
-        max_dt = epoch + max_offset_32
-
-        for zt in ZoneDumpData.load_transition_examples(key):
-            if key == "Asia/Tokyo" and zt.transition > datetime(1951, 9, 1):
-                continue
-
-            if zt.transition <= max_dt:
-                yield zt
-
     def test_fold_mutate(self):
         """Test that fold isn't mutated when no change is necessary.
 
@@ -361,7 +347,6 @@ class CZoneInfoTest(ZoneInfoTest):
                 self.assertEqual(dt.fold, 0)
 
 
-
 class ZoneInfoTestSubclass(ZoneInfoTest):
     @classmethod
     def setUpClass(cls):
@@ -399,6 +384,10 @@ class ZoneInfoV1Test(ZoneInfoTest):
                 yield zt
 
 
+class CZoneInfoV1Test(ZoneInfoV1Test):
+    klass = c_zoneinfo.ZoneInfo
+
+
 @unittest.skipIf(
     not HAS_TZDATA_PKG, "Skipping tzdata-specific tests: tzdata not installed"
 )
@@ -422,6 +411,13 @@ class TZDataTests(ZoneInfoTest):
 
     def zone_from_key(self, key):
         return self.klass(key=key)
+
+
+@unittest.skipIf(
+    not HAS_TZDATA_PKG, "Skipping tzdata-specific tests: tzdata not installed"
+)
+class CTZDataTests(TZDataTests):
+    klass = c_zoneinfo.ZoneInfo
 
 
 class WeirdZoneTest(unittest.TestCase):
@@ -680,6 +676,10 @@ class WeirdZoneTest(unittest.TestCase):
 
         zonefile.seek(0)
         return zonefile
+
+
+class CWeirdZoneTest(WeirdZoneTest):
+    klass = c_zoneinfo.ZoneInfo
 
 
 class TZStrTest(unittest.TestCase):
@@ -1068,6 +1068,10 @@ class TZStrTest(unittest.TestCase):
             )
 
         cls.test_cases = cases
+
+
+class CTZStrTest(TZStrTest):
+    klass = c_zoneinfo.ZoneInfo
 
 
 class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
