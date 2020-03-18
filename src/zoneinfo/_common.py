@@ -59,11 +59,26 @@ def load_data(fobj):
     # null to terminate the strings, but it's inconvenient here...
     char_total = 0
     abbr_vals = {}
-    for abbr in fobj.read(charcnt).decode().split("\x00"):
-        abbr_vals[char_total] = abbr
-        char_total += len(abbr) + 1
+    abbr_chars = fobj.read(charcnt)
 
-    abbr = tuple(abbr_vals[idx] for idx in abbrind)
+    def get_abbr(idx):
+        # Gets a string starting at idx and running until the next \x00
+        #
+        # We cannot pre-populate abbr_vals by splitting on \x00 because there
+        # are some zones that use subsets of longer abbreviations, like so:
+        #
+        #  LMT\x00AHST\x00HDT\x00
+        #
+        # Where the idx to abbr mapping should be:
+        #
+        # {0: "LMT", 4: "AHST", 5: "HST", 9: "HDT"}
+        if idx not in abbr_vals:
+            span_end = abbr_chars.find(b"\x00", idx)
+            abbr_vals[idx] = abbr_chars[idx:span_end].decode()
+
+        return abbr_vals[idx]
+
+    abbr = tuple(get_abbr(idx) for idx in abbrind)
 
     # The remainder of the file consists of leap seconds (currently unused) and
     # the standard/wall and ut/local indicators, which are metadata we don't need.
