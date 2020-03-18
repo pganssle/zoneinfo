@@ -69,8 +69,8 @@ def load_data(fobj):
     # the standard/wall and ut/local indicators, which are metadata we don't need.
     # In version 2 files, we need to skip the unnecessary data to get at the TZ string:
     if header.version >= 2:
-        # Each leap second record has size (time_size * 4)
-        skip_bytes = header.isutcnt + header.isstdcnt + header.leapcnt * 32
+        # Each leap second record has size (time_size + 4)
+        skip_bytes = header.isutcnt + header.isstdcnt + header.leapcnt * 12
         fobj.seek(skip_bytes, 1)
 
         c = fobj.read(1)  # Should be \n
