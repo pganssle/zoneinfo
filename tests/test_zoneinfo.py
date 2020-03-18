@@ -872,6 +872,25 @@ class TZStrTest(unittest.TestCase):
                 (datetime(2020, 10, 24, 23), N03, NORMAL),
             )
 
+        @call
+        def _add():
+            # Transition times with minutes and seconds
+            tzstr = "AAA3BBB,M3.2.0/01:30,M11.1.0/02:15:45"
+
+            AAA = ZoneOffset("AAA", timedelta(hours=-3))
+            BBB = ZoneOffset("BBB", timedelta(hours=-2), ONE_H)
+
+            cases[tzstr] = (
+                (datetime(2012, 3, 11, 1, 0), AAA, NORMAL),
+                (datetime(2012, 3, 11, 1, 30, fold=0), AAA, GAP),
+                (datetime(2012, 3, 11, 1, 30, fold=1), BBB, GAP),
+                (datetime(2012, 3, 11, 2, 30), BBB, NORMAL),
+                (datetime(2012, 11, 4, 1, 15, 44, 999999), BBB, NORMAL),
+                (datetime(2012, 11, 4, 1, 15, 45, fold=0), BBB, FOLD),
+                (datetime(2012, 11, 4, 1, 15, 45, fold=1), AAA, FOLD),
+                (datetime(2012, 11, 4, 2, 15, 45), AAA, NORMAL),
+            )
+
         cls.test_cases = cases
 
 
