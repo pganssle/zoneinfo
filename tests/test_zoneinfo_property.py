@@ -1,4 +1,5 @@
 import os
+import pickle
 import unittest
 from importlib import resources
 
@@ -70,6 +71,63 @@ class ZoneInfoTest(unittest.TestCase):
     def test_str(self, key):
         zi = self.klass(key)
         self.assertEqual(str(zi), key)
+
+    @hypothesis.given(key=valid_keys())
+    def test_pickle_unpickle_cache(self, key):
+        zi = self.klass(key)
+        pkl_str = pickle.dumps(zi)
+        zi_rt = pickle.loads(pkl_str)
+
+        self.assertIs(zi, zi_rt)
+
+    @hypothesis.given(key=valid_keys())
+    def test_pickle_unpickle_nocache(self, key):
+        zi = self.klass.nocache(key)
+        pkl_str = pickle.dumps(zi)
+        zi_rt = pickle.loads(pkl_str)
+
+        self.assertIsNot(zi, zi_rt)
+        self.assertEqual(str(zi), str(zi_rt))
+
+    @hypothesis.given(key=valid_keys())
+    def test_pickle_unpickle_cache_multiple_rounds(self, key):
+        """Test that pickle/unpickle is idempotent."""
+        zi_0 = self.klass(key)
+        pkl_str_0 = pickle.dumps(zi_0)
+        zi_1 = pickle.loads(pkl_str_0)
+        pkl_str_1 = pickle.dumps(zi_1)
+        zi_2 = pickle.loads(pkl_str_1)
+        pkl_str_2 = pickle.dumps(zi_2)
+
+        self.assertEqual(pkl_str_0, pkl_str_1)
+        self.assertEqual(pkl_str_1, pkl_str_2)
+
+        self.assertIs(zi_0, zi_1)
+        self.assertIs(zi_0, zi_2)
+        self.assertIs(zi_1, zi_2)
+
+    @hypothesis.given(key=valid_keys())
+    def test_pickle_unpickle_nocache_multiple_rounds(self, key):
+        """Test that pickle/unpickle is idempotent."""
+        zi_cache = self.klass(key)
+
+        zi_0 = self.klass.nocache(key)
+        pkl_str_0 = pickle.dumps(zi_0)
+        zi_1 = pickle.loads(pkl_str_0)
+        pkl_str_1 = pickle.dumps(zi_1)
+        zi_2 = pickle.loads(pkl_str_1)
+        pkl_str_2 = pickle.dumps(zi_2)
+
+        self.assertEqual(pkl_str_0, pkl_str_1)
+        self.assertEqual(pkl_str_1, pkl_str_2)
+
+        self.assertIsNot(zi_0, zi_1)
+        self.assertIsNot(zi_0, zi_2)
+        self.assertIsNot(zi_1, zi_2)
+
+        self.assertIsNot(zi_0, zi_cache)
+        self.assertIsNot(zi_1, zi_cache)
+        self.assertIsNot(zi_2, zi_cache)
 
 
 class ZoneInfoCacheTest(unittest.TestCase):
