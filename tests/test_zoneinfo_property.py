@@ -6,6 +6,8 @@ from importlib import resources
 import hypothesis
 import pytest
 import zoneinfo
+from zoneinfo import _czoneinfo as c_zoneinfo
+from zoneinfo import _zoneinfo as py_zoneinfo
 
 
 def _valid_keys():
@@ -65,7 +67,7 @@ def valid_keys():
 
 
 class ZoneInfoTest(unittest.TestCase):
-    klass = zoneinfo.ZoneInfo
+    klass = py_zoneinfo.ZoneInfo
 
     @hypothesis.given(key=valid_keys())
     def test_str(self, key):
@@ -130,8 +132,12 @@ class ZoneInfoTest(unittest.TestCase):
         self.assertIsNot(zi_2, zi_cache)
 
 
+class CZoneInfoTest(ZoneInfoTest):
+    klass = c_zoneinfo.ZoneInfo
+
+
 class ZoneInfoCacheTest(unittest.TestCase):
-    klass = zoneinfo.ZoneInfo
+    klass = py_zoneinfo.ZoneInfo
 
     @hypothesis.given(key=valid_keys())
     def test_cache(self, key):
@@ -146,3 +152,7 @@ class ZoneInfoCacheTest(unittest.TestCase):
         zi_1 = self.klass.nocache(key)
 
         self.assertIsNot(zi_0, zi_1)
+
+
+class CZoneInfoCacheTest(ZoneInfoCacheTest):
+    klass = c_zoneinfo.ZoneInfo
