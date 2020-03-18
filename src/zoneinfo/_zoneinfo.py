@@ -257,7 +257,7 @@ class ZoneInfo(tzinfo):
                 self._tti_before = None
 
         # Set the "fallback" time zone
-        if tz_str is not None:
+        if tz_str is not None and tz_str != b"":
             self._tz_after = _parse_tz_str(tz_str.decode())
         else:
             self._tz_after = self._ttinfos[-1]
