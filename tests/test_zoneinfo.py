@@ -849,6 +849,29 @@ class TZStrTest(unittest.TestCase):
                 (datetime(2020, 12, 31, 23, 59, 59, 999999), AAA, NORMAL),
             )
 
+        @call
+        def _add():
+            # Taken from America/Godthab, this rule has a transition on the
+            # Saturday before the last Sunday of March and October, at 22:00
+            # and 23:00, respectively. This is encoded with negative start
+            # and end transition times.
+            tzstr = "<-03>3<-02>,M3.5.0/-2,M10.5.0/-1"
+
+            N03 = ZoneOffset("-03", timedelta(hours=-3))
+            N02 = ZoneOffset("-02", timedelta(hours=-2), ONE_H)
+
+            cases[tzstr] = (
+                (datetime(2020, 3, 27), N03, NORMAL),
+                (datetime(2020, 3, 28, 21, 59, 59), N03, NORMAL),
+                (datetime(2020, 3, 28, 22, fold=0), N03, GAP),
+                (datetime(2020, 3, 28, 22, fold=1), N02, GAP),
+                (datetime(2020, 3, 28, 23), N02, NORMAL),
+                (datetime(2020, 10, 24, 21), N02, NORMAL),
+                (datetime(2020, 10, 24, 22, fold=0), N02, FOLD),
+                (datetime(2020, 10, 24, 22, fold=1), N03, FOLD),
+                (datetime(2020, 10, 24, 23), N03, NORMAL),
+            )
+
         cls.test_cases = cases
 
 
