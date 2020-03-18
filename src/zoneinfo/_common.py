@@ -40,8 +40,8 @@ def load_data(fobj):
         )
         trans_idx = struct.unpack(f">{timecnt}B", fobj.read(timecnt))
     else:
-        trans_list_utc = []
-        trans_idx = []
+        trans_list_utc = ()
+        trans_idx = ()
 
     # Read the ttinfo struct, (utoff, isdst, abbrind)
     if typecnt:
@@ -63,7 +63,7 @@ def load_data(fobj):
         abbr_vals[char_total] = abbr
         char_total += len(abbr) + 1
 
-    abbr = [abbr_vals[idx] for idx in abbrind]
+    abbr = tuple(abbr_vals[idx] for idx in abbrind)
 
     # The remainder of the file consists of leap seconds (currently unused) and
     # the standard/wall and ut/local indicators, which are metadata we don't need.
@@ -84,7 +84,7 @@ def load_data(fobj):
                 break
             tz_bytes += c
 
-        tz_str = tz_bytes.decode()
+        tz_str = tz_bytes
     else:
         tz_str = None
 
