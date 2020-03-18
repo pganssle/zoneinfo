@@ -684,6 +684,8 @@ class TZStrTest(unittest.TestCase):
             "PST8PDT",  # DST but no transition specified
             "+11",  # Unquoted alphanumeric
             "GMT,M3.2.0/2,M11.1.0/3",  # Transition rule but no DST
+            "GMT0+11,M3.2.0/2,M11.1.0/3",  # Unquoted alphanumeric in DST
+            "PST8PDT,M3.2.0/2",  # Only one transition rule
             # Invalid offsets
             "STD+25",
             "STD-25",
