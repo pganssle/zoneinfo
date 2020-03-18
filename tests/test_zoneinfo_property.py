@@ -63,6 +63,15 @@ def valid_keys():
     return hypothesis.strategies.sampled_from(VALID_KEYS)
 
 
+class ZoneInfoTest(unittest.TestCase):
+    klass = zoneinfo.ZoneInfo
+
+    @hypothesis.given(key=valid_keys())
+    def test_str(self, key):
+        zi = self.klass(key)
+        self.assertEqual(str(zi), key)
+
+
 class ZoneInfoCacheTest(unittest.TestCase):
     klass = zoneinfo.ZoneInfo
 
