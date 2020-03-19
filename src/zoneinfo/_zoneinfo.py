@@ -1,7 +1,6 @@
 import bisect
 import calendar
 import collections
-import importlib.resources
 import os
 import re
 import struct
@@ -61,10 +60,12 @@ class ZoneInfo(tzinfo):
         obj._file_path = obj._find_tzfile(key)
 
         if obj._file_path is not None:
-            with open(obj._file_path, "rb") as f:
-                obj._load_file(f)
+            file_obj = open(obj._file_path, "rb")
         else:
-            obj._load_tzdata(key)
+            file_obj = _common.load_tzdata(key)
+
+        with file_obj as f:
+            obj._load_file(f)
 
         return obj
 
@@ -91,20 +92,6 @@ class ZoneInfo(tzinfo):
         else:
             cls.__weak_cache.clear()
             cls.__strong_cache.clear()
-
-    def _load_tzdata(self, key):
-        # TODO: Proper error for malformed keys?
-        components = key.split("/")
-        package_name = ".".join(["tzdata.zoneinfo"] + components[:-1])
-        resource_name = components[-1]
-
-        try:
-            fobj = importlib.resources.open_binary(package_name, resource_name)
-        except (ImportError, FileNotFoundError) as e:
-            raise ValueError(f"No time zone found with key {key}") from e
-
-        with fobj as f:
-            self._load_file(f)
 
     # TODO: Handle `datetime.time` in these calls
     def utcoffset(self, dt):
