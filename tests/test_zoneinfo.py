@@ -405,6 +405,84 @@ class WeirdZoneTest(unittest.TestCase):
                 self.assertEqual(dt.utcoffset(), DST.utcoffset)
                 self.assertEqual(dt.dst(), DST.dst)
 
+    def test_no_tz_str(self):
+        STD = ZoneOffset("STD", ONE_H, ZERO)
+        DST = ZoneOffset("DST", 2 * ONE_H, ONE_H)
+
+        transitions = []
+        for year in range(1996, 2000):
+            transitions.append(
+                ZoneTransition(datetime(year, 3, 1, 2), STD, DST)
+            )
+            transitions.append(
+                ZoneTransition(datetime(year, 11, 1, 2), DST, STD)
+            )
+
+        after = ""
+
+        zf = self.construct_zone(transitions, after)
+
+        # According to RFC 8536, local times after the last transition time
+        # with an empty TZ string are unspecified. We will go with "hold the
+        # last transition", but the most we should promise is "doesn't crash."
+        zi = self.klass.from_file(zf)
+
+        cases = [
+            (datetime(1995, 1, 1), STD),
+            (datetime(1996, 4, 1), DST),
+            (datetime(1996, 11, 2), STD),
+            (datetime(2001, 1, 1), STD),
+        ]
+
+        for dt, offset in cases:
+            dt = dt.replace(tzinfo=zi)
+            with self.subTest(dt=dt):
+                self.assertEqual(dt.tzname(), offset.tzname)
+                self.assertEqual(dt.utcoffset(), offset.utcoffset)
+                self.assertEqual(dt.dst(), offset.dst)
+
+    def test_tz_before_only(self):
+        # From RFC 8536 Section 3.2:
+        #
+        #   If there are no transitions, local time for all timestamps is
+        #   specified by the TZ string in the footer if present and nonempty;
+        #   otherwise, it is specified by time type 0.
+
+        offsets = [
+            ZoneOffset("STD", ZERO, ZERO),
+            ZoneOffset("DST", ONE_H, ONE_H),
+        ]
+
+        for offset in offsets:
+            # Phantom transition to set time type 0.
+            transitions = [
+                ZoneTransition(None, offset, offset),
+            ]
+
+            after = ""
+
+            zf = self.construct_zone(transitions, after)
+            zi = self.klass.from_file(zf)
+
+            dts = [
+                datetime(1900, 1, 1),
+                datetime(1970, 1, 1),
+                datetime(2000, 1, 1),
+            ]
+
+            for dt in dts:
+                dt = dt.replace(tzinfo=zi)
+                with self.subTest(offset=offset, dt=dt):
+                    self.assertEqual(dt.tzname(), offset.tzname)
+                    self.assertEqual(dt.utcoffset(), offset.utcoffset)
+                    self.assertEqual(dt.dst(), offset.dst)
+
+    def test_empty_zone(self):
+        zf = self.construct_zone([], "")
+
+        with self.assertRaises(ValueError):
+            self.klass.from_file(zf)
+
     def construct_zone(self, transitions, after=None, version=3):
         # These are not used for anything, so we're not going to include
         # them for now.
@@ -423,7 +501,11 @@ class WeirdZoneTest(unittest.TestCase):
         transitions.sort(key=lambda x: x.transition)
 
         for zt in transitions:
-            trans_time = int(zt.transition_utc.timestamp())
+            if zt.transition:
+                trans_time = int(zt.transition_utc.timestamp())
+            else:
+                trans_time = None
+
             offset_before = zt.offset_before
             offset_after = zt.offset_after
 
@@ -432,7 +514,9 @@ class WeirdZoneTest(unittest.TestCase):
                 trans_times = trans_times_lists[v]
                 trans_idx = trans_idx_lists[v]
 
-                if not (dt_min <= trans_time <= dt_max):
+                if trans_time is not None and not (
+                    dt_min <= trans_time <= dt_max
+                ):
                     continue
 
                 if offset_before not in offsets:
@@ -441,8 +525,9 @@ class WeirdZoneTest(unittest.TestCase):
                 if offset_after not in offsets:
                     offsets.append(offset_after)
 
-                trans_times.append(trans_time)
-                trans_idx.append(offsets.index(offset_after))
+                if trans_time is not None:
+                    trans_times.append(trans_time)
+                    trans_idx.append(offsets.index(offset_after))
 
         isutcnt = len(isutc)
         isstdcnt = len(isstd)
