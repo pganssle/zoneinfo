@@ -322,6 +322,11 @@ class TZDataTests(ZoneInfoTest):
     in the event that the time zone policies in the relevant time zones change.
     """
 
+    def setUp(self):
+        super().setUp()
+
+        self.klass.clear_cache()
+
     @property
     def tzpath(self):
         return []
