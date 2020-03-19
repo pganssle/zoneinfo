@@ -1016,7 +1016,7 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
         self.assertIs(zi, zi_rt_2)
 
 
-class TzPathTest(unittest.TestCase, TzPathUserMixin):
+class TzPathTest(TzPathUserMixin, unittest.TestCase):
     module = zoneinfo
 
     @staticmethod
