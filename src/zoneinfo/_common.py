@@ -142,7 +142,11 @@ class _TZifHeader:
         if stream.read(4) != b"TZif":
             raise ValueError("Invalid TZif file: magic not found")
 
-        version = int(stream.read(1))
+        _version = stream.read(1)
+        if _version == b"\x00":
+            version = 1
+        else:
+            version = int(_version)
         stream.read(15)
 
         args = (version,)
