@@ -1188,18 +1188,29 @@ class ZoneInfoData:
 
     def _convert_to_v1(self, contents):
         assert contents[0:4] == b"TZif", "Invalid TZif data found!"
-        version = int(contents[5])
+        version = int(contents[4:5])
 
-        header_start = 6 + 16
+        header_start = 4 + 16
         header_end = header_start + 24  # 6l == 24 bytes
         assert version != 1, "Version 1 file found: no conversion necessary"
         isutcnt, isstdcnt, leapcnt, timecnt, typecnt, charcnt = struct.unpack(
             ">6l", contents[header_start:header_end]
         )
 
-        file_size = typecnt * 5 + charcnt * 6 + leapcnt * 8 + isstdcnt + isutcnt
+        file_size = (
+            timecnt * 5
+            + typecnt * 6
+            + charcnt
+            + leapcnt * 8
+            + isstdcnt
+            + isutcnt
+        )
         file_size += header_end
-        out = b"TZif" + b"1" + contents[5 : (file_size + 5)]
+        out = b"TZif" + b"1" + contents[5:file_size]
+
+        assert (
+            contents[file_size : (file_size + 4)] == b"TZif"
+        ), "Version 2 file not truncated at Version 2 header"
 
         return out
 
