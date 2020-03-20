@@ -247,7 +247,13 @@ class ZoneInfo(tzinfo):
         if tz_str is not None and tz_str != b"":
             self._tz_after = _parse_tz_str(tz_str.decode())
         else:
-            self._tz_after = self._ttinfos[-1]
+            if not self._ttinfos and not _ttinfo_list:
+                raise ValueError("No time zone information found.")
+
+            if self._ttinfos:
+                self._tz_after = self._ttinfos[-1]
+            else:
+                self._tz_after = _ttinfo_list[-1]
 
     @staticmethod
     def _utcoff_to_dstoff(trans_idx, utcoffsets, isdsts):

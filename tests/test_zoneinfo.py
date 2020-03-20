@@ -405,6 +405,84 @@ class WeirdZoneTest(unittest.TestCase):
                 self.assertEqual(dt.utcoffset(), DST.utcoffset)
                 self.assertEqual(dt.dst(), DST.dst)
 
+    def test_no_tz_str(self):
+        STD = ZoneOffset("STD", ONE_H, ZERO)
+        DST = ZoneOffset("DST", 2 * ONE_H, ONE_H)
+
+        transitions = []
+        for year in range(1996, 2000):
+            transitions.append(
+                ZoneTransition(datetime(year, 3, 1, 2), STD, DST)
+            )
+            transitions.append(
+                ZoneTransition(datetime(year, 11, 1, 2), DST, STD)
+            )
+
+        after = ""
+
+        zf = self.construct_zone(transitions, after)
+
+        # According to RFC 8536, local times after the last transition time
+        # with an empty TZ string are unspecified. We will go with "hold the
+        # last transition", but the most we should promise is "doesn't crash."
+        zi = self.klass.from_file(zf)
+
+        cases = [
+            (datetime(1995, 1, 1), STD),
+            (datetime(1996, 4, 1), DST),
+            (datetime(1996, 11, 2), STD),
+            (datetime(2001, 1, 1), STD),
+        ]
+
+        for dt, offset in cases:
+            dt = dt.replace(tzinfo=zi)
+            with self.subTest(dt=dt):
+                self.assertEqual(dt.tzname(), offset.tzname)
+                self.assertEqual(dt.utcoffset(), offset.utcoffset)
+                self.assertEqual(dt.dst(), offset.dst)
+
+    def test_tz_before_only(self):
+        # From RFC 8536 Section 3.2:
+        #
+        #   If there are no transitions, local time for all timestamps is
+        #   specified by the TZ string in the footer if present and nonempty;
+        #   otherwise, it is specified by time type 0.
+
+        offsets = [
+            ZoneOffset("STD", ZERO, ZERO),
+            ZoneOffset("DST", ONE_H, ONE_H),
+        ]
+
+        for offset in offsets:
+            # Phantom transition to set time type 0.
+            transitions = [
+                ZoneTransition(None, offset, offset),
+            ]
+
+            after = ""
+
+            zf = self.construct_zone(transitions, after)
+            zi = self.klass.from_file(zf)
+
+            dts = [
+                datetime(1900, 1, 1),
+                datetime(1970, 1, 1),
+                datetime(2000, 1, 1),
+            ]
+
+            for dt in dts:
+                dt = dt.replace(tzinfo=zi)
+                with self.subTest(offset=offset, dt=dt):
+                    self.assertEqual(dt.tzname(), offset.tzname)
+                    self.assertEqual(dt.utcoffset(), offset.utcoffset)
+                    self.assertEqual(dt.dst(), offset.dst)
+
+    def test_empty_zone(self):
+        zf = self.construct_zone([], "")
+
+        with self.assertRaises(ValueError):
+            self.klass.from_file(zf)
+
     def construct_zone(self, transitions, after=None, version=3):
         # These are not used for anything, so we're not going to include
         # them for now.
@@ -423,7 +501,11 @@ class WeirdZoneTest(unittest.TestCase):
         transitions.sort(key=lambda x: x.transition)
 
         for zt in transitions:
-            trans_time = int(zt.transition_utc.timestamp())
+            if zt.transition:
+                trans_time = int(zt.transition_utc.timestamp())
+            else:
+                trans_time = None
+
             offset_before = zt.offset_before
             offset_after = zt.offset_after
 
@@ -432,7 +514,9 @@ class WeirdZoneTest(unittest.TestCase):
                 trans_times = trans_times_lists[v]
                 trans_idx = trans_idx_lists[v]
 
-                if not (dt_min <= trans_time <= dt_max):
+                if trans_time is not None and not (
+                    dt_min <= trans_time <= dt_max
+                ):
                     continue
 
                 if offset_before not in offsets:
@@ -441,8 +525,9 @@ class WeirdZoneTest(unittest.TestCase):
                 if offset_after not in offsets:
                     offsets.append(offset_after)
 
-                trans_times.append(trans_time)
-                trans_idx.append(offsets.index(offset_after))
+                if trans_time is not None:
+                    trans_times.append(trans_time)
+                    trans_idx.append(offsets.index(offset_after))
 
         isutcnt = len(isutc)
         isstdcnt = len(isstd)
@@ -599,6 +684,8 @@ class TZStrTest(unittest.TestCase):
             "PST8PDT",  # DST but no transition specified
             "+11",  # Unquoted alphanumeric
             "GMT,M3.2.0/2,M11.1.0/3",  # Transition rule but no DST
+            "GMT0+11,M3.2.0/2,M11.1.0/3",  # Unquoted alphanumeric in DST
+            "PST8PDT,M3.2.0/2",  # Only one transition rule
             # Invalid offsets
             "STD+25",
             "STD-25",
@@ -847,6 +934,48 @@ class TZStrTest(unittest.TestCase):
                 (datetime(2020, 11, 1, 11, fold=1), AAA, FOLD),
                 (datetime(2020, 11, 1, 12), AAA, NORMAL),
                 (datetime(2020, 12, 31, 23, 59, 59, 999999), AAA, NORMAL),
+            )
+
+        @call
+        def _add():
+            # Taken from America/Godthab, this rule has a transition on the
+            # Saturday before the last Sunday of March and October, at 22:00
+            # and 23:00, respectively. This is encoded with negative start
+            # and end transition times.
+            tzstr = "<-03>3<-02>,M3.5.0/-2,M10.5.0/-1"
+
+            N03 = ZoneOffset("-03", timedelta(hours=-3))
+            N02 = ZoneOffset("-02", timedelta(hours=-2), ONE_H)
+
+            cases[tzstr] = (
+                (datetime(2020, 3, 27), N03, NORMAL),
+                (datetime(2020, 3, 28, 21, 59, 59), N03, NORMAL),
+                (datetime(2020, 3, 28, 22, fold=0), N03, GAP),
+                (datetime(2020, 3, 28, 22, fold=1), N02, GAP),
+                (datetime(2020, 3, 28, 23), N02, NORMAL),
+                (datetime(2020, 10, 24, 21), N02, NORMAL),
+                (datetime(2020, 10, 24, 22, fold=0), N02, FOLD),
+                (datetime(2020, 10, 24, 22, fold=1), N03, FOLD),
+                (datetime(2020, 10, 24, 23), N03, NORMAL),
+            )
+
+        @call
+        def _add():
+            # Transition times with minutes and seconds
+            tzstr = "AAA3BBB,M3.2.0/01:30,M11.1.0/02:15:45"
+
+            AAA = ZoneOffset("AAA", timedelta(hours=-3))
+            BBB = ZoneOffset("BBB", timedelta(hours=-2), ONE_H)
+
+            cases[tzstr] = (
+                (datetime(2012, 3, 11, 1, 0), AAA, NORMAL),
+                (datetime(2012, 3, 11, 1, 30, fold=0), AAA, GAP),
+                (datetime(2012, 3, 11, 1, 30, fold=1), BBB, GAP),
+                (datetime(2012, 3, 11, 2, 30), BBB, NORMAL),
+                (datetime(2012, 11, 4, 1, 15, 44, 999999), BBB, NORMAL),
+                (datetime(2012, 11, 4, 1, 15, 45, fold=0), BBB, FOLD),
+                (datetime(2012, 11, 4, 1, 15, 45, fold=1), AAA, FOLD),
+                (datetime(2012, 11, 4, 2, 15, 45), AAA, NORMAL),
             )
 
         cls.test_cases = cases
