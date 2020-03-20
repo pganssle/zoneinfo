@@ -1192,7 +1192,7 @@ class ZoneInfoData:
 
         header_start = 4 + 16
         header_end = header_start + 24  # 6l == 24 bytes
-        assert version != 1, "Version 1 file found: no conversion necessary"
+        assert version >= 2, "Version 1 file found: no conversion necessary"
         isutcnt, isstdcnt, leapcnt, timecnt, typecnt, charcnt = struct.unpack(
             ">6l", contents[header_start:header_end]
         )
@@ -1206,7 +1206,7 @@ class ZoneInfoData:
             + isutcnt
         )
         file_size += header_end
-        out = b"TZif" + b"1" + contents[5:file_size]
+        out = b"TZif" + b"\x00" + contents[5:file_size]
 
         assert (
             contents[file_size : (file_size + 4)] == b"TZif"
