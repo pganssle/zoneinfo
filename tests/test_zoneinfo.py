@@ -1166,6 +1166,13 @@ class ZoneInfoCacheTest(TzPathUserMixin, ZoneInfoTestBase):
 
         self.assertIs(zi0, zi1)
 
+    def test_clear_cache_explicit_none(self):
+        la0 = self.klass("America/Los_Angeles")
+        self.klass.clear_cache(only_keys=None)
+        la1 = self.klass("America/Los_Angeles")
+
+        self.assertIsNot(la0, la1)
+
     def test_clear_cache_one_key(self):
         """Tests that you can clear a single key from the cache."""
         la0 = self.klass("America/Los_Angeles")
@@ -1199,9 +1206,6 @@ class ZoneInfoCacheTest(TzPathUserMixin, ZoneInfoTestBase):
 
 class CZoneInfoCacheTest(ZoneInfoCacheTest):
     module = c_zoneinfo
-
-    test_clear_cache_one_key = None
-    test_clear_cache_two_keys = None
 
 
 class ZoneInfoPickleTest(TzPathUserMixin, ZoneInfoTestBase):

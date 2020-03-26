@@ -350,15 +350,55 @@ zoneinfo_nocache(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 }
 
 static PyObject *
-zoneinfo_clear_cache(PyObject *cls)
+zoneinfo_clear_cache(PyObject *cls, PyObject *args, PyObject *kwargs)
 {
-    PyObject *weak_cache = get_weak_cache(cls);
-    PyObject *rv = PyObject_CallMethod(weak_cache, "clear", NULL);
-    if (rv == NULL) {
+    PyObject *only_keys = NULL;
+    static char *kwlist[] = {"only_keys", NULL};
+
+    if (!(PyArg_ParseTupleAndKeywords(args, kwargs, "|$O", kwlist,
+                                      &only_keys))) {
         return NULL;
     }
 
-    Py_DECREF(rv);
+    PyObject *weak_cache = get_weak_cache(cls);
+
+    if (only_keys == NULL || only_keys == Py_None) {
+        PyObject *rv = PyObject_CallMethod(weak_cache, "clear", NULL);
+        if (rv != NULL) {
+            Py_DECREF(rv);
+        }
+    }
+    else {
+        PyObject *item = NULL;
+        PyObject *pop = PyUnicode_FromString("pop");
+        if (pop == NULL) {
+            return NULL;
+        }
+
+        PyObject *iter = PyObject_GetIter(only_keys);
+        if (iter == NULL) {
+            Py_DECREF(pop);
+            return NULL;
+        }
+
+        while ((item = PyIter_Next(iter))) {
+            PyObject *tmp = PyObject_CallMethodObjArgs(weak_cache, pop,
+                                                       item, Py_None, NULL);
+
+            Py_DECREF(item);
+            if (tmp == NULL) {
+                break;
+            }
+            Py_DECREF(tmp);
+        }
+        Py_DECREF(iter);
+        Py_DECREF(pop);
+    }
+
+    if (PyErr_Occurred()) {
+        return NULL;
+    }
+
     Py_RETURN_NONE;
 }
 
@@ -2140,7 +2180,8 @@ zoneinfo_init_subclass(PyTypeObject *cls, PyObject *args, PyObject **kwargs)
 // Specify the ZoneInfo type
 static PyMethodDef zoneinfo_methods[] = {
     {"clear_cache", (PyCFunction)zoneinfo_clear_cache,
-     METH_NOARGS | METH_CLASS, PyDoc_STR("Clear the ZoneInfo cache.")},
+     METH_VARARGS | METH_KEYWORDS | METH_CLASS,
+     PyDoc_STR("Clear the ZoneInfo cache.")},
     {"nocache", (PyCFunction)zoneinfo_nocache,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Get a new instance of ZoneInfo, bypassing the cache.")},
