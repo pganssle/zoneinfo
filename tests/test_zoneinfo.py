@@ -1233,14 +1233,14 @@ class TestModule(unittest.TestCase):
         self.assertCountEqual(module_dir, module_unique)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ZoneOffset:
     tzname: str
     utcoffset: timedelta
     dst: timedelta = ZERO
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class ZoneTransition:
     transition: datetime
     offset_before: ZoneOffset
