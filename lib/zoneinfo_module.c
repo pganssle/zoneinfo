@@ -2102,6 +2102,9 @@ initialize_caches()
     if (TIMEDELTA_CACHE == NULL) {
         TIMEDELTA_CACHE = PyDict_New();
     }
+    else {
+        Py_INCREF(TIMEDELTA_CACHE);
+    }
 
     if (TIMEDELTA_CACHE == NULL) {
         return -1;
@@ -2187,12 +2190,6 @@ static PyMethodDef module_methods[] = {{NULL, NULL}};
 static void
 module_free()
 {
-    Py_XDECREF(TIMEDELTA_CACHE);
-    TIMEDELTA_CACHE = NULL;
-
-    Py_XDECREF(ZONEINFO_WEAK_CACHE);
-    ZONEINFO_WEAK_CACHE = NULL;
-
     Py_XDECREF(_tzpath_find_tzfile);
     _tzpath_find_tzfile = NULL;
 
@@ -2201,26 +2198,21 @@ module_free()
 
     Py_XDECREF(io_open);
     io_open = NULL;
-}
 
-static struct PyModuleDef zoneinfomodule = {
-    PyModuleDef_HEAD_INIT,
-    .m_name = "zoneinfo._czoneinfo",
-    .m_doc = "C implementation of the zoneinfo module",
-    .m_size = -1,
-    .m_methods = module_methods,
-    .m_free = (freefunc)module_free};
-
-PyMODINIT_FUNC
-PyInit__czoneinfo(void)
-{
-    PyObject *m; /* a module object */
-    m = PyModule_Create(&zoneinfomodule);
-
-    if (m == NULL) {
-        return NULL;
+    Py_XDECREF(TIMEDELTA_CACHE);
+    if (!Py_REFCNT(TIMEDELTA_CACHE)) {
+        TIMEDELTA_CACHE = NULL;
     }
 
+    Py_XDECREF(ZONEINFO_WEAK_CACHE);
+    if (!Py_REFCNT(ZONEINFO_WEAK_CACHE)) {
+        ZONEINFO_WEAK_CACHE = NULL;
+    }
+}
+
+static int
+zoneinfomodule_exec(PyObject *m)
+{
     PyDateTime_IMPORT;
     PyZoneInfo_ZoneInfoType.tp_base = PyDateTimeAPI->TZInfoType;
     if (PyType_Ready(&PyZoneInfo_ZoneInfoType) < 0) {
@@ -2259,11 +2251,30 @@ PyInit__czoneinfo(void)
         goto error;
     }
 
-    initialize_caches();
+    if (initialize_caches()) {
+        goto error;
+    }
 
-    return m;
+    return 0;
 
 error:
-    Py_DECREF(m);
-    return NULL;
+    return -1;
+}
+
+static PyModuleDef_Slot zoneinfomodule_slots[] = {
+    {Py_mod_exec, zoneinfomodule_exec}, {0, NULL}};
+
+static struct PyModuleDef zoneinfomodule = {
+    PyModuleDef_HEAD_INIT,
+    .m_name = "zoneinfo._czoneinfo",
+    .m_doc = "C implementation of the zoneinfo module",
+    .m_size = 0,
+    .m_methods = module_methods,
+    .m_slots = zoneinfomodule_slots,
+    .m_free = (freefunc)module_free};
+
+PyMODINIT_FUNC
+PyInit__czoneinfo(void)
+{
+    return PyModuleDef_Init(&zoneinfomodule);
 }
