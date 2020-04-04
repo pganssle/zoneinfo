@@ -28,21 +28,25 @@ def _load_timedelta(seconds):
 
 
 class ZoneInfo(tzinfo):
-    __strong_cache_size = 8
-    __strong_cache = collections.OrderedDict()
-    __weak_cache = weakref.WeakValueDictionary()
+    _strong_cache_size = 8
+    _strong_cache = collections.OrderedDict()
+    _weak_cache = weakref.WeakValueDictionary()
+
+    def __init_subclass__(cls):
+        cls._strong_cache = collections.OrderedDict()
+        cls._weak_cache = weakref.WeakValueDictionary()
 
     def __new__(cls, key):
-        instance = cls.__weak_cache.get(key, None)
+        instance = cls._weak_cache.get(key, None)
         if instance is None:
-            instance = cls.__weak_cache.setdefault(key, cls._new_instance(key))
+            instance = cls._weak_cache.setdefault(key, cls._new_instance(key))
             instance._from_cache = True
 
         # Update the "strong" cache
-        cls.__strong_cache[key] = cls.__strong_cache.pop(key, instance)
+        cls._strong_cache[key] = cls._strong_cache.pop(key, instance)
 
-        if len(cls.__strong_cache) > cls.__strong_cache_size:
-            cls.__strong_cache.popitem(last=False)
+        if len(cls._strong_cache) > cls._strong_cache_size:
+            cls._strong_cache.popitem(last=False)
 
         return instance
 
@@ -86,12 +90,12 @@ class ZoneInfo(tzinfo):
     def clear_cache(cls, *, only_keys=None):
         if only_keys is not None:
             for key in only_keys:
-                cls.__weak_cache.pop(key, None)
-                cls.__strong_cache.pop(key, None)
+                cls._weak_cache.pop(key, None)
+                cls._strong_cache.pop(key, None)
 
         else:
-            cls.__weak_cache.clear()
-            cls.__strong_cache.clear()
+            cls._weak_cache.clear()
+            cls._strong_cache.clear()
 
     # TODO: Handle `datetime.time` in these calls
     def utcoffset(self, dt):
