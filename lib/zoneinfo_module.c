@@ -67,9 +67,11 @@ typedef struct {
     int8_t second;
 } DayRule;
 
+static PyTypeObject PyZoneInfo_ZoneInfoType;
+
 // Constants
-static PyObject *ZONEINFO_WEAK_CACHE = NULL;
 static PyObject *TIMEDELTA_CACHE = NULL;
+static PyObject *ZONEINFO_WEAK_CACHE = NULL;
 
 static const int EPOCHORDINAL = 719163;
 static int DAYS_IN_MONTH[] = {
@@ -200,18 +202,34 @@ cleanup:
 }
 
 static PyObject *
+get_weak_cache(PyTypeObject *type)
+{
+    if (type == &PyZoneInfo_ZoneInfoType) {
+        return ZONEINFO_WEAK_CACHE;
+    }
+    else {
+        PyObject *cache =
+            PyObject_GetAttrString((PyObject *)type, "_weak_cache");
+        // We are assuming that the type lives at least as long as the function
+        // that calls get_weak_cache, and that it holds a reference to the
+        // cache, so we'll return a "borrowed reference".
+        Py_XDECREF(cache);
+        return cache;
+    }
+}
+
+static PyObject *
 zoneinfo_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 {
-    // TODO: Support subclasses
     PyObject *key = NULL;
     static char *kwlist[] = {"key", NULL};
     if (PyArg_ParseTupleAndKeywords(args, kw, "O", kwlist, &key) == 0) {
         return NULL;
     }
 
-    assert(ZONEINFO_WEAK_CACHE != NULL);
+    PyObject *weak_cache = get_weak_cache(type);
     PyObject *instance =
-        PyObject_CallMethod(ZONEINFO_WEAK_CACHE, "get", "O", key, Py_None);
+        PyObject_CallMethod(weak_cache, "get", "O", key, Py_None);
     if (instance == NULL) {
         return NULL;
     }
@@ -222,8 +240,8 @@ zoneinfo_new(PyTypeObject *type, PyObject *args, PyObject *kw)
             return NULL;
         }
 
-        instance = PyObject_CallMethod(ZONEINFO_WEAK_CACHE, "setdefault", "OO",
-                                       key, tmp);
+        instance =
+            PyObject_CallMethod(weak_cache, "setdefault", "OO", key, tmp);
         ((PyZoneInfo_ZoneInfo *)instance)->source = SOURCE_CACHE;
 
         Py_DECREF(tmp);
@@ -332,9 +350,15 @@ zoneinfo_nocache(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 }
 
 static PyObject *
-zoneinfo_clear_cache(PyObject *self)
+zoneinfo_clear_cache(PyObject *cls)
 {
-    PyObject_CallMethod(ZONEINFO_WEAK_CACHE, "clear", NULL);
+    PyObject *weak_cache = get_weak_cache(cls);
+    PyObject *rv = PyObject_CallMethod(weak_cache, "clear", NULL);
+    if (rv == NULL) {
+        return NULL;
+    }
+
+    Py_DECREF(rv);
     Py_RETURN_NONE;
 }
 
@@ -2057,6 +2081,59 @@ get_local_timestamp(PyObject *dt, int64_t *local_ts)
 }
 
 /////
+// Functions for cache handling
+static PyObject *
+new_weak_cache()
+{
+    PyObject *weakref_module = PyImport_ImportModule("weakref");
+    if (weakref_module == NULL) {
+        return NULL;
+    }
+
+    PyObject *weak_cache =
+        PyObject_CallMethod(weakref_module, "WeakValueDictionary", "");
+    Py_DECREF(weakref_module);
+    return weak_cache;
+}
+
+static int
+initialize_caches()
+{
+    if (TIMEDELTA_CACHE == NULL) {
+        TIMEDELTA_CACHE = PyDict_New();
+    }
+
+    if (TIMEDELTA_CACHE == NULL) {
+        return -1;
+    }
+
+    if (ZONEINFO_WEAK_CACHE == NULL) {
+        ZONEINFO_WEAK_CACHE = new_weak_cache();
+    }
+    else {
+        Py_INCREF(ZONEINFO_WEAK_CACHE);
+    }
+
+    if (ZONEINFO_WEAK_CACHE == NULL) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static PyObject *
+zoneinfo_init_subclass(PyTypeObject *cls, PyObject *args, PyObject **kwargs)
+{
+    PyObject *weak_cache = new_weak_cache();
+    if (weak_cache == NULL) {
+        return NULL;
+    }
+
+    PyObject_SetAttrString((PyObject *)cls, "_weak_cache", weak_cache);
+    Py_RETURN_NONE;
+}
+
+/////
 // Specify the ZoneInfo type
 static PyMethodDef zoneinfo_methods[] = {
     {"clear_cache", (PyCFunction)zoneinfo_clear_cache,
@@ -2083,11 +2160,15 @@ static PyMethodDef zoneinfo_methods[] = {
      PyDoc_STR("Function for serialization with the pickle protocol.")},
     {"_unpickle", (PyCFunction)zoneinfo__unpickle, METH_VARARGS | METH_CLASS,
      PyDoc_STR("Private method used in unpickling.")},
+    {"__init_subclass__", (PyCFunction)zoneinfo_init_subclass,
+     METH_VARARGS | METH_KEYWORDS,
+     PyDoc_STR("Function to initialize subclasses.")},
     {NULL} /* Sentinel */
 };
 
 static PyTypeObject PyZoneInfo_ZoneInfoType = {
-    PyVarObject_HEAD_INIT(NULL, 0).tp_name = "zoneinfo._czoneinfo.ZoneInfo",
+    PyVarObject_HEAD_INIT(NULL, 0)  //
+        .tp_name = "zoneinfo._czoneinfo.ZoneInfo",
     .tp_basicsize = sizeof(PyZoneInfo_ZoneInfo),
     .tp_weaklistoffset = offsetof(PyZoneInfo_ZoneInfo, weakreflist),
     .tp_repr = (reprfunc)zoneinfo_repr,
@@ -2178,40 +2259,7 @@ PyInit__czoneinfo(void)
         goto error;
     }
 
-    /* Initialize caches */
-    TIMEDELTA_CACHE = PyDict_New();
-    if (TIMEDELTA_CACHE == NULL) {
-        goto error;
-    }
-
-    PyObject *weakref_module = NULL;
-    PyObject *WeakValueDictionary = NULL;
-
-    if ((weakref_module = PyImport_ImportModule("weakref")) == NULL) {
-        goto error;
-    }
-
-    WeakValueDictionary =
-        PyObject_GetAttrString(weakref_module, "WeakValueDictionary");
-    Py_DECREF(weakref_module);
-    weakref_module = NULL;
-    if (WeakValueDictionary == NULL) {
-        goto error;
-    }
-    PyObject *no_args = PyTuple_New(0);
-    if (no_args == NULL) {
-        Py_DECREF(WeakValueDictionary);
-        goto error;
-    }
-
-    // TODO: VectorCall
-    ZONEINFO_WEAK_CACHE = PyObject_CallObject(WeakValueDictionary, no_args);
-
-    Py_DECREF(no_args);
-    Py_DECREF(WeakValueDictionary);
-    if (ZONEINFO_WEAK_CACHE == NULL) {
-        goto error;
-    }
+    initialize_caches();
 
     return m;
 

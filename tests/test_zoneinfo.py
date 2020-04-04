@@ -403,6 +403,10 @@ class ZoneInfoTestSubclass(ZoneInfoTest):
         self.assertIsInstance(sub_obj, self.klass)
 
 
+class CZoneInfoTestSubclass(ZoneInfoTest):
+    module = c_zoneinfo
+
+
 class ZoneInfoV1Test(ZoneInfoTest):
     @property
     def tzpath(self):
