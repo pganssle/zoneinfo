@@ -93,6 +93,7 @@ class TzPathUserMixin:
 
 class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
     klass = py_zoneinfo.ZoneInfo
+    class_name = "ZoneInfo"
 
     @property
     def tzpath(self):
@@ -130,7 +131,7 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
         key = next(iter(self.zones()))
 
         zi = self.klass(key)
-        class_name = "ZoneInfo"
+        class_name = self.class_name
         with self.subTest(name="from key"):
             self.assertRegex(repr(zi), class_name)
 
@@ -290,6 +291,25 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
 
                     dt_after = dt_after_utc.astimezone(zi)
                     self.assertEqual(dt_after.fold, 1, (dt_after, dt_utc))
+
+
+class ZoneInfoTestSubclass(ZoneInfoTest):
+    @classmethod
+    def setUpClass(cls):
+        class ZISubclass(cls.klass):
+            pass
+
+        cls.class_name = "ZISubclass"
+        cls.parent_klass = cls.klass
+        cls.klass = ZISubclass
+
+    def test_subclass_own_cache(self):
+        base_obj = self.parent_klass("Europe/London")
+        sub_obj = self.klass("Europe/London")
+
+        self.assertIsNot(base_obj, sub_obj)
+        self.assertIsInstance(base_obj, self.parent_klass)
+        self.assertIsInstance(sub_obj, self.klass)
 
 
 class ZoneInfoV1Test(ZoneInfoTest):
