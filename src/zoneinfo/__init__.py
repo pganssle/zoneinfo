@@ -2,7 +2,11 @@ __all__ = ["ZoneInfo", "set_tzpath", "TZPATH"]
 
 from . import _tzpath
 from ._version import __version__
-from ._zoneinfo import ZoneInfo
+
+try:
+    from ._czoneinfo import ZoneInfo
+except ImportError:
+    from ._zoneinfo import ZoneInfo
 
 set_tzpath = _tzpath.set_tzpath
 

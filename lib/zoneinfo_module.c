@@ -2171,7 +2171,7 @@ static PyMethodDef zoneinfo_methods[] = {
 
 static PyTypeObject PyZoneInfo_ZoneInfoType = {
     PyVarObject_HEAD_INIT(NULL, 0)  //
-        .tp_name = "zoneinfo._czoneinfo.ZoneInfo",
+        .tp_name = "zoneinfo.ZoneInfo",
     .tp_basicsize = sizeof(PyZoneInfo_ZoneInfo),
     .tp_weaklistoffset = offsetof(PyZoneInfo_ZoneInfo, weakreflist),
     .tp_repr = (reprfunc)zoneinfo_repr,

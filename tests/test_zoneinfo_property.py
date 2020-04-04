@@ -1,3 +1,4 @@
+import contextlib
 import os
 import pickle
 import unittest
@@ -6,8 +7,11 @@ from importlib import resources
 import hypothesis
 import pytest
 import zoneinfo
-from zoneinfo import _czoneinfo as c_zoneinfo
-from zoneinfo import _zoneinfo as py_zoneinfo
+
+from . import _support as test_support
+from ._support import ZoneInfoTestBase
+
+py_zoneinfo, c_zoneinfo = test_support.get_modules()
 
 
 def _valid_keys():
@@ -66,13 +70,28 @@ def valid_keys():
     return hypothesis.strategies.sampled_from(VALID_KEYS)
 
 
-class ZoneInfoTest(unittest.TestCase):
-    klass = py_zoneinfo.ZoneInfo
+class ZoneInfoTest(ZoneInfoTestBase):
+    module = py_zoneinfo
 
     @hypothesis.given(key=valid_keys())
     def test_str(self, key):
         zi = self.klass(key)
         self.assertEqual(str(zi), key)
+
+
+class CZoneInfoTest(ZoneInfoTest):
+    module = c_zoneinfo
+
+
+class ZoneInfoPickleTest(ZoneInfoTestBase):
+    module = py_zoneinfo
+
+    def setUp(self):
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(test_support.set_zoneinfo_module(self.module))
+            self.addCleanup(stack.pop_all().close)
+
+        super().setUp()
 
     @hypothesis.given(key=valid_keys())
     def test_pickle_unpickle_cache(self, key):
@@ -132,12 +151,12 @@ class ZoneInfoTest(unittest.TestCase):
         self.assertIsNot(zi_2, zi_cache)
 
 
-class CZoneInfoTest(ZoneInfoTest):
-    klass = c_zoneinfo.ZoneInfo
+class CZoneInfoPickleTest(ZoneInfoPickleTest):
+    module = c_zoneinfo
 
 
-class ZoneInfoCacheTest(unittest.TestCase):
-    klass = py_zoneinfo.ZoneInfo
+class ZoneInfoCacheTest(ZoneInfoTestBase):
+    module = py_zoneinfo
 
     @hypothesis.given(key=valid_keys())
     def test_cache(self, key):
