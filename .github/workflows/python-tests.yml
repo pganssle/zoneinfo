@@ -4,7 +4,6 @@ on: [push]
 
 jobs:
   tests:
-
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -31,6 +30,27 @@ jobs:
     - name: Report coverage
       run: |
         tox -e coverage-report,codecov
+
+  c_coverage:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: [3.8]
+        os: ["ubuntu-latest"]
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: C coverage - ${{ matrix.os }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip tox
+      - name: Run tests
+        run: |
+          tox -e gcov,codecov
 
   other:
     runs-on: "ubuntu-latest"

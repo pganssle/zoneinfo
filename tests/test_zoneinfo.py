@@ -14,22 +14,24 @@ import re
 import shutil
 import struct
 import tempfile
-import threading
 import unittest
 from datetime import date, datetime, time, timedelta, timezone
 
-import zoneinfo
-from zoneinfo import _zoneinfo as py_zoneinfo
+from . import _support as test_support
+from ._support import (
+    OS_ENV_LOCK,
+    TZPATH_LOCK,
+    TZPATH_TEST_LOCK,
+    ZoneInfoTestBase,
+)
+
+py_zoneinfo, c_zoneinfo = test_support.get_modules()
 
 try:
     importlib.metadata.metadata("tzdata")
     HAS_TZDATA_PKG = True
 except importlib.metadata.PackageNotFoundError:
     HAS_TZDATA_PKG = False
-
-OS_ENV_LOCK = threading.Lock()
-TZPATH_LOCK = threading.Lock()
-TZPATH_TEST_LOCK = threading.Lock()
 
 ZONEINFO_DATA = None
 ZONEINFO_DATA_V1 = None
@@ -56,15 +58,21 @@ def tearDownModule():
     shutil.rmtree(TEMP_DIR)
 
 
-@contextlib.contextmanager
-def tzpath_context(tzpath, lock=TZPATH_LOCK):
-    with lock:
-        old_path = zoneinfo.TZPATH
-        try:
-            zoneinfo.set_tzpath(tzpath)
-            yield
-        finally:
-            zoneinfo.set_tzpath(old_path)
+class ZoneInfoTestBase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.klass = cls.module.ZoneInfo
+        super().setUpClass()
+
+    @contextlib.contextmanager
+    def tzpath_context(self, tzpath, lock=TZPATH_LOCK):
+        with lock:
+            old_path = self.module.TZPATH
+            try:
+                self.module.set_tzpath(tzpath)
+                yield
+            finally:
+                self.module.set_tzpath(old_path)
 
 
 class TzPathUserMixin:
@@ -84,15 +92,44 @@ class TzPathUserMixin:
     def setUp(self):
         with contextlib.ExitStack() as stack:
             stack.enter_context(
-                tzpath_context(self.tzpath, lock=TZPATH_TEST_LOCK)
+                self.tzpath_context(self.tzpath, lock=TZPATH_TEST_LOCK)
             )
             self.addCleanup(stack.pop_all().close)
 
         super().setUp()
 
 
-class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
-    klass = py_zoneinfo.ZoneInfo
+class DatetimeSubclassMixin:
+    """
+    Replaces all ZoneTransition transition dates with a datetime subclass.
+    """
+
+    class DatetimeSubclass(datetime):
+        @classmethod
+        def from_datetime(cls, dt):
+            return cls(
+                dt.year,
+                dt.month,
+                dt.day,
+                dt.hour,
+                dt.minute,
+                dt.second,
+                dt.microsecond,
+                tzinfo=dt.tzinfo,
+                fold=dt.fold,
+            )
+
+    def load_transition_examples(self, key):
+        transition_examples = super().load_transition_examples(key)
+        for zt in transition_examples:
+            dt = zt.transition
+            new_dt = self.DatetimeSubclass.from_datetime(dt)
+            new_zt = dataclasses.replace(zt, transition=new_dt)
+            yield new_zt
+
+
+class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
+    module = py_zoneinfo
     class_name = "ZoneInfo"
 
     @property
@@ -293,6 +330,67 @@ class ZoneInfoTest(TzPathUserMixin, unittest.TestCase):
                     self.assertEqual(dt_after.fold, 1, (dt_after, dt_utc))
 
 
+class CZoneInfoTest(ZoneInfoTest):
+    module = c_zoneinfo
+
+    def test_fold_mutate(self):
+        """Test that fold isn't mutated when no change is necessary.
+
+        The underlying C API is capable of mutating datetime objects, and
+        may rely on the fact that addition of a datetime object returns a
+        new datetime; this test ensures that the input datetime to fromutc
+        is not mutated.
+        """
+
+        def to_subclass(dt):
+            class SameAddSubclass(type(dt)):
+                def __add__(self, other):
+                    if other == timedelta(0):
+                        return self
+                    return super().__add__(other)
+
+            return SameAddSubclass(
+                dt.year,
+                dt.month,
+                dt.day,
+                dt.hour,
+                dt.minute,
+                dt.second,
+                dt.microsecond,
+                fold=dt.fold,
+                tzinfo=dt.tzinfo,
+            )
+
+        subclass = [False, True]
+
+        key = "Europe/London"
+        zi = self.zone_from_key("Europe/London")
+        for zt in self.load_transition_examples(key):
+            if zt.fold and zt.offset_after.utcoffset == ZERO:
+                example = zt.transition_utc.replace(tzinfo=zi)
+                break
+
+        for subclass in [False, True]:
+            if subclass:
+                dt = to_subclass(example)
+            else:
+                dt = example
+
+            with self.subTest(subclass=subclass):
+                dt_fromutc = zi.fromutc(dt)
+
+                self.assertEqual(dt_fromutc.fold, 1)
+                self.assertEqual(dt.fold, 0)
+
+
+class ZoneInfoDatetimeSubclassTest(DatetimeSubclassMixin, ZoneInfoTest):
+    pass
+
+
+class CZoneInfoDatetimeSubclassTest(DatetimeSubclassMixin, CZoneInfoTest):
+    pass
+
+
 class ZoneInfoTestSubclass(ZoneInfoTest):
     @classmethod
     def setUpClass(cls):
@@ -312,6 +410,10 @@ class ZoneInfoTestSubclass(ZoneInfoTest):
         self.assertIsInstance(sub_obj, self.klass)
 
 
+class CZoneInfoTestSubclass(ZoneInfoTest):
+    module = c_zoneinfo
+
+
 class ZoneInfoV1Test(ZoneInfoTest):
     @property
     def tzpath(self):
@@ -328,6 +430,10 @@ class ZoneInfoV1Test(ZoneInfoTest):
         for zt in ZoneDumpData.load_transition_examples(key):
             if min_dt <= zt.transition <= max_dt:
                 yield zt
+
+
+class CZoneInfoV1Test(ZoneInfoV1Test):
+    module = c_zoneinfo
 
 
 @unittest.skipIf(
@@ -355,8 +461,15 @@ class TZDataTests(ZoneInfoTest):
         return self.klass(key=key)
 
 
-class WeirdZoneTest(unittest.TestCase):
-    klass = py_zoneinfo.ZoneInfo
+@unittest.skipIf(
+    not HAS_TZDATA_PKG, "Skipping tzdata-specific tests: tzdata not installed"
+)
+class CTZDataTests(TZDataTests):
+    module = c_zoneinfo
+
+
+class WeirdZoneTest(ZoneInfoTestBase):
+    module = py_zoneinfo
 
     def test_one_transition(self):
         LMT = ZoneOffset("LMT", -timedelta(hours=6, minutes=31, seconds=2))
@@ -613,8 +726,12 @@ class WeirdZoneTest(unittest.TestCase):
         return zonefile
 
 
-class TZStrTest(unittest.TestCase):
-    klass = py_zoneinfo.ZoneInfo
+class CWeirdZoneTest(WeirdZoneTest):
+    module = c_zoneinfo
+
+
+class TZStrTest(ZoneInfoTestBase):
+    module = py_zoneinfo
 
     NORMAL = 0
     FOLD = 1
@@ -622,6 +739,8 @@ class TZStrTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+
         cls._populate_test_cases()
         cls.populate_tzstr_header()
 
@@ -1001,8 +1120,12 @@ class TZStrTest(unittest.TestCase):
         cls.test_cases = cases
 
 
-class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
-    klass = py_zoneinfo.ZoneInfo
+class CTZStrTest(TZStrTest):
+    module = c_zoneinfo
+
+
+class ZoneInfoCacheTest(TzPathUserMixin, ZoneInfoTestBase):
+    module = py_zoneinfo
 
     def setUp(self):
         self.klass.clear_cache()
@@ -1038,10 +1161,17 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
         the same object.
         """
         zi0 = self.klass("America/Los_Angeles")
-        with tzpath_context([]):
+        with self.tzpath_context([]):
             zi1 = self.klass("America/Los_Angeles")
 
         self.assertIs(zi0, zi1)
+
+    def test_clear_cache_explicit_none(self):
+        la0 = self.klass("America/Los_Angeles")
+        self.klass.clear_cache(only_keys=None)
+        la1 = self.klass("America/Los_Angeles")
+
+        self.assertIsNot(la0, la1)
 
     def test_clear_cache_one_key(self):
         """Tests that you can clear a single key from the cache."""
@@ -1074,11 +1204,20 @@ class ZoneInfoCacheTest(TzPathUserMixin, unittest.TestCase):
         self.assertIs(tok0, tok1)
 
 
-class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
-    klass = py_zoneinfo.ZoneInfo
+class CZoneInfoCacheTest(ZoneInfoCacheTest):
+    module = c_zoneinfo
+
+
+class ZoneInfoPickleTest(TzPathUserMixin, ZoneInfoTestBase):
+    module = py_zoneinfo
 
     def setUp(self):
         self.klass.clear_cache()
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(test_support.set_zoneinfo_module(self.module))
+            self.addCleanup(stack.pop_all().close)
+
         super().setUp()
 
     @property
@@ -1170,8 +1309,12 @@ class ZoneInfoPickleTest(TzPathUserMixin, unittest.TestCase):
         self.assertIs(zi, zi_rt_2)
 
 
-class TzPathTest(TzPathUserMixin, unittest.TestCase):
-    module = zoneinfo
+class CZoneInfoPickleTest(ZoneInfoPickleTest):
+    module = c_zoneinfo
+
+
+class TzPathTest(TzPathUserMixin, ZoneInfoTestBase):
+    module = py_zoneinfo
 
     @staticmethod
     @contextlib.contextmanager
@@ -1219,18 +1362,22 @@ class TzPathTest(TzPathUserMixin, unittest.TestCase):
         tzpath_0 = ["/one", "/two"]
         tzpath_1 = ["/three"]
 
-        with tzpath_context(tzpath_0):
+        with self.tzpath_context(tzpath_0):
             query_0 = self.module.TZPATH
 
-        with tzpath_context(tzpath_1):
+        with self.tzpath_context(tzpath_1):
             query_1 = self.module.TZPATH
 
         self.assertSequenceEqual(tzpath_0, query_0)
         self.assertSequenceEqual(tzpath_1, query_1)
 
 
-class TestModule(unittest.TestCase):
-    module = zoneinfo
+class CTzPathTest(TzPathTest):
+    module = c_zoneinfo
+
+
+class TestModule(ZoneInfoTestBase):
+    module = py_zoneinfo
 
     def test_getattr_error(self):
         with self.assertRaises(AttributeError):
@@ -1251,6 +1398,10 @@ class TestModule(unittest.TestCase):
         module_unique = set(module_dir)
 
         self.assertCountEqual(module_dir, module_unique)
+
+
+class CTestModule(TestModule):
+    module = c_zoneinfo
 
 
 @dataclasses.dataclass(frozen=True)

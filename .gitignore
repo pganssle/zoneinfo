@@ -1,6 +1,7 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+*.so
 
 # Distribution / packaging
 build/
@@ -11,7 +12,7 @@ dist/
 # Sphinx documentation
 docs/_build/
 
-# Testing
+# Testing and coverage
 .cache
 .hypothesis_cache
 .hypothesis
@@ -19,6 +20,9 @@ docs/_build/
 .pytest_cache
 .tox
 .pytype
+*.gcda
+*.gcno
+*.gcov
 
 # Virtual environments
 venv/
