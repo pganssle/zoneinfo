@@ -1,4 +1,5 @@
 import contextlib
+import datetime
 import os
 import pickle
 import unittest
@@ -175,3 +176,49 @@ class ZoneInfoCacheTest(ZoneInfoTestBase):
 
 class CZoneInfoCacheTest(ZoneInfoCacheTest):
     klass = c_zoneinfo.ZoneInfo
+
+
+class PythonCConsistencyTest(unittest.TestCase):
+    """Tests that the C and Python versions do the same thing."""
+
+    @hypothesis.given(dt=hypothesis.strategies.datetimes(), key=valid_keys())
+    def test_same_str(self, dt, key):
+        py_dt = dt.replace(tzinfo=py_zoneinfo.ZoneInfo(key))
+        c_dt = dt.replace(tzinfo=c_zoneinfo.ZoneInfo(key))
+
+        self.assertEqual(str(py_dt), str(c_dt))
+
+    @hypothesis.given(dt=hypothesis.strategies.datetimes(), key=valid_keys())
+    def test_same_offsets_and_names(self, dt, key):
+        py_dt = dt.replace(tzinfo=py_zoneinfo.ZoneInfo(key))
+        c_dt = dt.replace(tzinfo=c_zoneinfo.ZoneInfo(key))
+
+        self.assertEqual(py_dt.tzname(), c_dt.tzname())
+        self.assertEqual(py_dt.utcoffset(), c_dt.utcoffset())
+        self.assertEqual(py_dt.dst(), c_dt.dst())
+
+    @hypothesis.given(
+        dt=hypothesis.strategies.datetimes(
+            timezones=hypothesis.strategies.just(datetime.timezone.utc)
+        ),
+        key=valid_keys(),
+    )
+    def test_same_from_utc(self, dt, key):
+        py_dt = dt.astimezone(py_zoneinfo.ZoneInfo(key))
+        c_dt = dt.astimezone(c_zoneinfo.ZoneInfo(key))
+
+        self.assertEqual(py_dt, c_dt)  # This is probably trivially true
+
+        self.assertEqual(py_dt.tzname(), c_dt.tzname())
+        self.assertEqual(py_dt.utcoffset(), c_dt.utcoffset())
+        self.assertEqual(py_dt.dst(), c_dt.dst())
+
+    @hypothesis.given(dt=hypothesis.strategies.datetimes(), key=valid_keys())
+    def test_same_to_utc(self, dt, key):
+        py_dt = dt.replace(tzinfo=py_zoneinfo.ZoneInfo(key))
+        c_dt = dt.replace(tzinfo=c_zoneinfo.ZoneInfo(key))
+
+        py_utc = py_dt.astimezone(datetime.timezone.utc)
+        c_utc = c_dt.astimezone(datetime.timezone.utc)
+
+        self.assertEqual(py_utc, c_utc)
