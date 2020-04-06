@@ -144,7 +144,7 @@ class ZoneInfo(tzinfo):
 
             # Detect fold
             shift = tti_prev.utcoff - tti.utcoff
-            fold = shift > timedelta(0, timestamp - self._trans_utc[idx - 1])
+            fold = shift.total_seconds() > timestamp - self._trans_utc[idx - 1]
         dt += tti.utcoff
         if fold:
             return dt.replace(fold=1)
