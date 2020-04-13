@@ -616,6 +616,67 @@ class WeirdZoneTest(ZoneInfoTestBase):
         with self.assertRaises(ValueError):
             self.klass.from_file(zf)
 
+    def test_zone_very_large_timestamp(self):
+        """Test when a transition is in the far past or future.
+
+        Particularly, this is a concern if something:
+
+            1. Attempts to call ``datetime.timestamp`` for a datetime outside
+               of ``[datetime.min, datetime.max]``.
+            2. Attempts to construct a timedelta outside of
+               ``[timedelta.min, timedelta.max]``.
+
+        This actually occurs "in the wild", as some time zones on Ubuntu (at
+        least as of 2020) have an initial transition added at ``-2**58``.
+        """
+
+        LMT = ZoneOffset("LMT", timedelta(seconds=-968))
+        GMT = ZoneOffset("GMT", ZERO)
+
+        transitions = [
+            (-(1 << 62), LMT, LMT),
+            ZoneTransition(datetime(1912, 1, 1), LMT, GMT),
+            ((1 << 62), GMT, GMT),
+        ]
+
+        after = "GMT0"
+
+        zf = self.construct_zone(transitions, after)
+        zi = self.klass.from_file(zf, key="Africa/Abidjan")
+
+        offset_cases = [
+            (datetime.min, LMT),
+            (datetime.max, GMT),
+            (datetime(1911, 12, 31), LMT),
+            (datetime(1912, 1, 2), GMT),
+        ]
+
+        for dt_naive, offset in offset_cases:
+            dt = dt_naive.replace(tzinfo=zi)
+            with self.subTest(name="offset", dt=dt, offset=offset):
+                self.assertEqual(dt.tzname(), offset.tzname)
+                self.assertEqual(dt.utcoffset(), offset.utcoffset)
+                self.assertEqual(dt.dst(), offset.dst)
+
+        utc_cases = [
+            (datetime.min, datetime.min + timedelta(seconds=968)),
+            (datetime(1898, 12, 31, 23, 43, 52), datetime(1899, 1, 1)),
+            (
+                datetime(1911, 12, 31, 23, 59, 59, 999999),
+                datetime(1912, 1, 1, 0, 16, 7, 999999),
+            ),
+            (datetime(1912, 1, 1, 0, 16, 8), datetime(1912, 1, 1, 0, 16, 8)),
+            (datetime(1970, 1, 1), datetime(1970, 1, 1)),
+            (datetime.max, datetime.max),
+        ]
+
+        for naive_dt, naive_dt_utc in utc_cases:
+            dt = naive_dt.replace(tzinfo=zi)
+            dt_utc = naive_dt_utc.replace(tzinfo=timezone.utc)
+
+            self.assertEqual(dt_utc.astimezone(zi), dt)
+            self.assertEqual(dt, dt_utc)
+
     def construct_zone(self, transitions, after=None, version=3):
         # These are not used for anything, so we're not going to include
         # them for now.
@@ -631,16 +692,25 @@ class WeirdZoneTest(ZoneInfoTestBase):
         v2_range = (-(2 ** 63), 2 ** 63)
         ranges = [v1_range, v2_range]
 
-        transitions.sort(key=lambda x: x.transition)
+        def zt_as_tuple(zt):
+            # zt may be a tuple (timestamp, offset_before, offset_after) or
+            # a ZoneTransition object — this is to allow the timestamp to be
+            # values that are outside the valid range for datetimes but still
+            # valid 64-bit timestamps.
+            if isinstance(zt, tuple):
+                return zt
 
-        for zt in transitions:
             if zt.transition:
                 trans_time = int(zt.transition_utc.timestamp())
             else:
                 trans_time = None
 
-            offset_before = zt.offset_before
-            offset_after = zt.offset_after
+            return (trans_time, zt.offset_before, zt.offset_after)
+
+        transitions = sorted(map(zt_as_tuple, transitions), key=lambda x: x[0])
+
+        for zt in transitions:
+            trans_time, offset_before, offset_after = zt
 
             for v, (dt_min, dt_max) in enumerate(ranges):
                 offsets = offset_lists[v]

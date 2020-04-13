@@ -382,8 +382,8 @@ zoneinfo_clear_cache(PyObject *cls, PyObject *args, PyObject *kwargs)
         }
 
         while ((item = PyIter_Next(iter))) {
-            PyObject *tmp = PyObject_CallMethodObjArgs(weak_cache, pop,
-                                                       item, Py_None, NULL);
+            PyObject *tmp = PyObject_CallMethodObjArgs(weak_cache, pop, item,
+                                                       Py_None, NULL);
 
             Py_DECREF(item);
             if (tmp == NULL) {
