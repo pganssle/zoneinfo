@@ -51,7 +51,7 @@ class ZoneInfo(tzinfo):
         return instance
 
     @classmethod
-    def nocache(cls, key):
+    def no_cache(cls, key):
         obj = cls._new_instance(key)
         obj._from_cache = False
 
@@ -207,7 +207,7 @@ class ZoneInfo(tzinfo):
         if from_cache:
             return cls(key)
         else:
-            return cls.nocache(key)
+            return cls.no_cache(key)
 
     def _find_tzfile(self, key):
         return _tzpath.find_tzfile(key)

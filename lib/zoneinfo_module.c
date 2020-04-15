@@ -333,7 +333,7 @@ error:
 }
 
 static PyObject *
-zoneinfo_nocache(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
+zoneinfo_no_cache(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
 {
     static char *kwlist[] = {"key", NULL};
     PyObject *key = NULL;
@@ -2182,7 +2182,7 @@ static PyMethodDef zoneinfo_methods[] = {
     {"clear_cache", (PyCFunction)zoneinfo_clear_cache,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Clear the ZoneInfo cache.")},
-    {"nocache", (PyCFunction)zoneinfo_nocache,
+    {"no_cache", (PyCFunction)zoneinfo_no_cache,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Get a new instance of ZoneInfo, bypassing the cache.")},
     {"from_file", (PyCFunction)zoneinfo_from_file,

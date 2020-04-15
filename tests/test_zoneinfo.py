@@ -1216,10 +1216,10 @@ class ZoneInfoCacheTest(TzPathUserMixin, ZoneInfoTestBase):
 
         self.assertIs(tz0, tz1)
 
-    def test_nocache(self):
+    def test_no_cache(self):
 
         tz0 = self.klass("Europe/Lisbon")
-        tz1 = self.klass.nocache("Europe/Lisbon")
+        tz1 = self.klass.no_cache("Europe/Lisbon")
 
         self.assertIsNot(tz0, tz1)
 
@@ -1317,14 +1317,14 @@ class ZoneInfoPickleTest(TzPathUserMixin, ZoneInfoTestBase):
 
         self.assertIs(zi_rt, zi_rt2)
 
-    def test_nocache(self):
-        zi_nocache = self.klass.nocache("Europe/Dublin")
+    def test_no_cache(self):
+        zi_no_cache = self.klass.no_cache("Europe/Dublin")
 
-        pkl = pickle.dumps(zi_nocache)
+        pkl = pickle.dumps(zi_no_cache)
         zi_rt = pickle.loads(pkl)
 
         with self.subTest(test="Not the pickled object"):
-            self.assertIsNot(zi_rt, zi_nocache)
+            self.assertIsNot(zi_rt, zi_no_cache)
 
         zi_rt2 = pickle.loads(pkl)
         with self.subTest(test="Not a second unpickled object"):
