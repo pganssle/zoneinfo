@@ -2,8 +2,10 @@ import os
 import sys
 
 
-def set_tzpath(tzpaths=None):
+def reset_tzpath(to=None):
     global TZPATH
+
+    tzpaths = to
     if tzpaths is not None:
         if isinstance(tzpaths, (str, bytes)):
             raise TypeError(
@@ -44,4 +46,4 @@ def find_tzfile(key):
 
 
 TZPATH = ()
-set_tzpath()
+reset_tzpath()
