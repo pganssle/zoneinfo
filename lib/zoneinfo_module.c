@@ -1,8 +1,9 @@
+#include "Python.h"
+
 #include <ctype.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#include "Python.h"
 #include "datetime.h"
 
 // Imports
