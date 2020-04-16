@@ -11,6 +11,7 @@ IndentWidth: 4
 Language: Cpp
 PointerAlignment: Right
 ReflowComments: true
+SortIncludes: false
 SpaceBeforeParens: ControlStatements
 SpacesInParentheses: false
 TabWidth: 4
