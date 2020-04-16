@@ -23,6 +23,12 @@ ZONE_DEFAULT_CONSTRUCTOR = {
     "pytz": pytz.timezone,
 }
 
+ZONE_NO_CACHE_CONSTRUCTOR = {
+    "c_zoneinfo": ZoneInfo.no_cache,
+    "py_zoneinfo": PyZoneInfo.no_cache,
+    "dateutil": tz.gettz.nocache,
+}
+
 BENCHMARKS = {
     "to_utc": lambda *args, **kwargs: bench_astimezone(
         *args, **kwargs, from_utc=False
@@ -31,6 +37,12 @@ BENCHMARKS = {
         *args, **kwargs, from_utc=True
     ),
     "utcoffset": lambda *args, **kwargs: bench_utcoffset(*args, **kwargs),
+    "constructor": lambda *args, **kwargs: bench_constructor(
+        *args, **kwargs, cache=True
+    ),
+    "no_cache_constructor": lambda *args, **kwargs: bench_constructor(
+        *args, **kwargs, cache=False
+    ),
 }
 
 
@@ -64,6 +76,25 @@ def bench_utcoffset(source, zone_key):
 
     def func(dt=dt):
         return dt.utcoffset()
+
+    return func
+
+
+def bench_constructor(source, zone_key, cache=False):
+    if cache:
+        zone_cache = get_zone(source, zone_key)
+        constructor = ZONE_DEFAULT_CONSTRUCTOR[source]
+    else:
+        if source not in ZONE_NO_CACHE_CONSTRUCTOR:
+            raise UnsupportedOperation(
+                f"Source {source} does not support no-cache construction."
+            )
+
+        zone_cache = None
+        constructor = ZONE_NO_CACHE_CONSTRUCTOR[source]
+
+    def func(constructor=constructor, key=zone_key, _cache=zone_cache):
+        constructor(key)
 
     return func
 
@@ -154,7 +185,10 @@ def main(sources, zones, benchmarks):
             to_run[(benchmark, zone)] = []
             for source in sources:
                 func_factory = BENCHMARKS[benchmark]
-                func = func_factory(source, zone)
+                try:
+                    func = func_factory(source, zone)
+                except UnsupportedOperation:
+                    continue
 
                 to_run[(benchmark, zone)].append((source, func))
 
@@ -168,6 +202,10 @@ def main(sources, zones, benchmarks):
 
 class InvalidInput(ValueError):
     """Raised for user input errors."""
+
+
+class UnsupportedOperation(Exception):
+    """Raised when a source doesn't support an operation."""
 
 
 if __name__ == "__main__":
