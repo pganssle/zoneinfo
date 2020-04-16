@@ -54,7 +54,7 @@ class ZoneInfoTestBase(unittest.TestCase):
         with lock:
             old_path = self.module.TZPATH
             try:
-                self.module.set_tzpath(tzpath)
+                self.module.reset_tzpath(tzpath)
                 yield
             finally:
-                self.module.set_tzpath(old_path)
+                self.module.reset_tzpath(old_path)

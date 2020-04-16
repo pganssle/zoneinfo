@@ -69,10 +69,10 @@ class ZoneInfoTestBase(unittest.TestCase):
         with lock:
             old_path = self.module.TZPATH
             try:
-                self.module.set_tzpath(tzpath)
+                self.module.reset_tzpath(tzpath)
                 yield
             finally:
-                self.module.set_tzpath(old_path)
+                self.module.reset_tzpath(old_path)
 
 
 class TzPathUserMixin:
@@ -1216,14 +1216,14 @@ class ZoneInfoCacheTest(TzPathUserMixin, ZoneInfoTestBase):
 
         self.assertIs(tz0, tz1)
 
-    def test_nocache(self):
+    def test_no_cache(self):
 
         tz0 = self.klass("Europe/Lisbon")
-        tz1 = self.klass.nocache("Europe/Lisbon")
+        tz1 = self.klass.no_cache("Europe/Lisbon")
 
         self.assertIsNot(tz0, tz1)
 
-    def test_cache_set_tzpath(self):
+    def test_cache_reset_tzpath(self):
         """Test that the cache persists when tzpath has been changed.
 
         The PEP specifies that as long as a reference exists to one zone
@@ -1317,14 +1317,14 @@ class ZoneInfoPickleTest(TzPathUserMixin, ZoneInfoTestBase):
 
         self.assertIs(zi_rt, zi_rt2)
 
-    def test_nocache(self):
-        zi_nocache = self.klass.nocache("Europe/Dublin")
+    def test_no_cache(self):
+        zi_no_cache = self.klass.no_cache("Europe/Dublin")
 
-        pkl = pickle.dumps(zi_nocache)
+        pkl = pickle.dumps(zi_no_cache)
         zi_rt = pickle.loads(pkl)
 
         with self.subTest(test="Not the pickled object"):
-            self.assertIsNot(zi_rt, zi_nocache)
+            self.assertIsNot(zi_rt, zi_no_cache)
 
         zi_rt2 = pickle.loads(pkl)
         with self.subTest(test="Not a second unpickled object"):
@@ -1402,7 +1402,7 @@ class TzPathTest(TzPathUserMixin, ZoneInfoTestBase):
                 os.environ[path_var] = old_env  # pragma: nocover
 
     def test_env_variable(self):
-        """Tests that the environment variable works with set_tzpath"""
+        """Tests that the environment variable works with reset_tzpath."""
         new_paths = [
             ("", []),
             ("/etc/zoneinfo", ["/etc/zoneinfo"]),
@@ -1412,9 +1412,14 @@ class TzPathTest(TzPathUserMixin, ZoneInfoTestBase):
         for new_path_var, expected_result in new_paths:
             with self.python_tzpath_context(new_path_var):
                 with self.subTest(tzpath=new_path_var):
-                    self.module.set_tzpath()
+                    self.module.reset_tzpath()
                     tzpath = self.module.TZPATH
                     self.assertSequenceEqual(tzpath, expected_result)
+
+    def test_reset_tzpath_kwarg(self):
+        self.module.reset_tzpath(to=["/a/b/c"])
+
+        self.assertSequenceEqual(self.module.TZPATH, ("/a/b/c",))
 
     def test_tzpath_error(self):
         bad_values = [
@@ -1426,7 +1431,7 @@ class TzPathTest(TzPathUserMixin, ZoneInfoTestBase):
         for bad_value in bad_values:
             with self.subTest(value=bad_value):
                 with self.assertRaises(TypeError):
-                    self.module.set_tzpath(bad_value)
+                    self.module.reset_tzpath(bad_value)
 
     def test_tzpath_attribute(self):
         tzpath_0 = ["/one", "/two"]

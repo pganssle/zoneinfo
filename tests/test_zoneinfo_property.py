@@ -103,8 +103,8 @@ class ZoneInfoPickleTest(ZoneInfoTestBase):
         self.assertIs(zi, zi_rt)
 
     @hypothesis.given(key=valid_keys())
-    def test_pickle_unpickle_nocache(self, key):
-        zi = self.klass.nocache(key)
+    def test_pickle_unpickle_no_cache(self, key):
+        zi = self.klass.no_cache(key)
         pkl_str = pickle.dumps(zi)
         zi_rt = pickle.loads(pkl_str)
 
@@ -129,11 +129,11 @@ class ZoneInfoPickleTest(ZoneInfoTestBase):
         self.assertIs(zi_1, zi_2)
 
     @hypothesis.given(key=valid_keys())
-    def test_pickle_unpickle_nocache_multiple_rounds(self, key):
+    def test_pickle_unpickle_no_cache_multiple_rounds(self, key):
         """Test that pickle/unpickle is idempotent."""
         zi_cache = self.klass(key)
 
-        zi_0 = self.klass.nocache(key)
+        zi_0 = self.klass.no_cache(key)
         pkl_str_0 = pickle.dumps(zi_0)
         zi_1 = pickle.loads(pkl_str_0)
         pkl_str_1 = pickle.dumps(zi_1)
@@ -167,9 +167,9 @@ class ZoneInfoCacheTest(ZoneInfoTestBase):
         self.assertIs(zi_0, zi_1)
 
     @hypothesis.given(key=valid_keys())
-    def test_nocache(self, key):
-        zi_0 = self.klass.nocache(key)
-        zi_1 = self.klass.nocache(key)
+    def test_no_cache(self, key):
+        zi_0 = self.klass.no_cache(key)
+        zi_1 = self.klass.no_cache(key)
 
         self.assertIsNot(zi_0, zi_1)
 

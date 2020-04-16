@@ -1,4 +1,4 @@
-__all__ = ["ZoneInfo", "set_tzpath", "TZPATH"]
+__all__ = ["ZoneInfo", "reset_tzpath", "TZPATH"]
 
 from . import _tzpath
 from ._version import __version__
@@ -8,7 +8,7 @@ try:
 except ImportError:
     from ._zoneinfo import ZoneInfo
 
-set_tzpath = _tzpath.set_tzpath
+reset_tzpath = _tzpath.reset_tzpath
 
 
 def __getattr__(name):
