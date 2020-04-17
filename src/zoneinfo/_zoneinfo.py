@@ -212,6 +212,21 @@ class ZoneInfo(tzinfo):
     def _find_tzfile(self, key):
         return _tzpath.find_tzfile(key)
 
+    def _compare_key(self):
+        return (self._key,
+                self._trans_utc, self._trans_local,
+                self._ttinfos, self._tti_before,
+                self._tz_after)
+
+    def __hash__(self):
+        return hash(self._compare_key())
+
+    def __eq__(self, other):
+        if isinstance(other, ZoneInfo):
+            return (self._compare_key() == other._compare_key())
+        else:
+            return False
+
     def _load_file(self, fobj):
         # Retrieve all the data as it exists in the zoneinfo file
         trans_idx, trans_utc, utcoff, isdst, abbr, tz_str = _common.load_data(
@@ -234,7 +249,7 @@ class ZoneInfo(tzinfo):
 
         self._trans_utc = trans_utc
         self._trans_local = trans_local
-        self._ttinfos = [_ttinfo_list[idx] for idx in trans_idx]
+        self._ttinfos = tuple([_ttinfo_list[idx] for idx in trans_idx])
 
         # Find the first non-DST transition
         for i in range(len(isdst)):
@@ -328,7 +343,7 @@ class ZoneInfo(tzinfo):
 
         This is necessary to easily find the transition times in local time"""
         if not trans_list_utc:
-            return [[], []]
+            return ((), ())
 
         # Start with the timestamps and modify in-place
         trans_list_wall = [list(trans_list_utc), list(trans_list_utc)]
@@ -354,7 +369,7 @@ class ZoneInfo(tzinfo):
             trans_list_wall[0][i] += offset_0
             trans_list_wall[1][i] += offset_1
 
-        return trans_list_wall
+        return tuple(tuple(item) for item in trans_list_wall)
 
 
 class _ttinfo:
@@ -370,6 +385,18 @@ class _ttinfo:
             f"{self.__class__.__name__}"
             + f"({self.utcoff}, {self.dstoff}, {self.tzname})"
         )
+
+    def _compare_key(self):
+        return (self.utcoff, self.dstoff, self.tzname)
+
+    def __hash__(self):
+        return hash(self._compare_key())
+
+    def __eq__(self, other):
+        if isinstance(other, _ttinfo):
+            return (self._compare_key() == other._compare_key())
+        else:
+            return False
 
 
 class _TZStr:
@@ -406,6 +433,20 @@ class _TZStr:
 
         self.get_trans_info = self._get_trans_info
         self.get_trans_info_fromutc = self._get_trans_info_fromutc
+
+    def _compare_key(self):
+        return (self.std,
+                self.start, self.end,
+                self.dst, self.dst_diff)
+
+    def __hash__(self):
+        return hash(self._compare_key())
+
+    def __eq__(self, other):
+        if isinstance(other, _TZStr):
+            return (self._compare_key() == other._compare_key())
+        else:
+            return False
 
     def transitions(self, year):
         start = self.start.year_to_epoch(year)
@@ -529,6 +570,19 @@ class _CalendarOffset:
         self.hour = hour
         self.minute = minute
         self.second = second
+
+    def _compare_key(self):
+        return (self.m, self.w, self.d,
+                self.hour, self.minute, self.second)
+
+    def __hash__(self):
+        return hash(self._compare_key())
+
+    def __eq__(self, other):
+        if isinstance(other, _CalendarOffset):
+            return (self._compare_key() == other._compare_key())
+        else:
+            return False
 
     @classmethod
     def _ymd2ord(cls, year, month, day):
