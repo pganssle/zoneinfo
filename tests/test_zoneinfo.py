@@ -394,6 +394,8 @@ class CZoneInfoDatetimeSubclassTest(DatetimeSubclassMixin, CZoneInfoTest):
 class ZoneInfoTestSubclass(ZoneInfoTest):
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+
         class ZISubclass(cls.klass):
             pass
 
