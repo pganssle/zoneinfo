@@ -14,6 +14,10 @@ from ._support import ZoneInfoTestBase
 
 py_zoneinfo, c_zoneinfo = test_support.get_modules()
 
+UTC = datetime.timezone.utc
+MIN_UTC = datetime.datetime.min.replace(tzinfo=UTC)
+MAX_UTC = datetime.datetime.max.replace(tzinfo=UTC)
+
 
 def _valid_keys():
     """Determine all valid ZoneInfo keys available on the search path.
@@ -202,13 +206,35 @@ class PythonCConsistencyTest(unittest.TestCase):
 
     @hypothesis.given(
         dt=hypothesis.strategies.datetimes(
-            timezones=hypothesis.strategies.just(datetime.timezone.utc)
+            timezones=hypothesis.strategies.just(UTC)
         ),
         key=valid_keys(),
     )
+    @hypothesis.example(dt=MIN_UTC, key="Asia/Tokyo")
+    @hypothesis.example(dt=MAX_UTC, key="Asia/Tokyo")
+    @hypothesis.example(dt=MIN_UTC, key="America/New_York")
+    @hypothesis.example(dt=MAX_UTC, key="America/New_York")
     def test_same_from_utc(self, dt, key):
-        py_dt = dt.astimezone(py_zoneinfo.ZoneInfo(key))
-        c_dt = dt.astimezone(c_zoneinfo.ZoneInfo(key))
+        py_zi = py_zoneinfo.ZoneInfo(key)
+        c_zi = c_zoneinfo.ZoneInfo(key)
+
+        # Convert to UTC: This can overflow, but we just care about consistency
+        py_overflow_exc = None
+        c_overflow_exc = None
+        try:
+            py_dt = dt.astimezone(py_zi)
+        except OverflowError as e:
+            py_overflow_exc = e
+
+        try:
+            c_dt = dt.astimezone(c_zi)
+        except OverflowError as e:
+            c_overflow_exc = e
+
+        if (py_overflow_exc is not None) != (c_overflow_exc is not None):
+            raise py_overflow_exc or c_overflow_exc  # pragma: nocover
+        elif py_overflow_exc is not None:
+            return  # Consistently raises the same exception
 
         # PEP 495 says that an inter-zone comparison between ambiguous
         # datetimes is always False.
@@ -224,11 +250,30 @@ class PythonCConsistencyTest(unittest.TestCase):
         self.assertEqual(py_dt.dst(), c_dt.dst())
 
     @hypothesis.given(dt=hypothesis.strategies.datetimes(), key=valid_keys())
+    @hypothesis.example(dt=datetime.datetime.max, key="America/New_York")
+    @hypothesis.example(dt=datetime.datetime.min, key="America/New_York")
+    @hypothesis.example(dt=datetime.datetime.min, key="Asia/Tokyo")
+    @hypothesis.example(dt=datetime.datetime.max, key="Asia/Tokyo")
     def test_same_to_utc(self, dt, key):
         py_dt = dt.replace(tzinfo=py_zoneinfo.ZoneInfo(key))
         c_dt = dt.replace(tzinfo=c_zoneinfo.ZoneInfo(key))
 
-        py_utc = py_dt.astimezone(datetime.timezone.utc)
-        c_utc = c_dt.astimezone(datetime.timezone.utc)
+        # Convert from UTC: Overflow OK if it happens in both implementations
+        py_overflow_exc = None
+        c_overflow_exc = None
+        try:
+            py_utc = py_dt.astimezone(UTC)
+        except OverflowError as e:
+            py_overflow_exc = e
+
+        try:
+            c_utc = c_dt.astimezone(UTC)
+        except OverflowError as e:
+            c_overflow_exc = e
+
+        if (py_overflow_exc is not None) != (c_overflow_exc is not None):
+            raise py_overflow_exc or c_overflow_exc  # pragma: nocover
+        elif py_overflow_exc is not None:
+            return  # Consistently raises the same exception
 
         self.assertEqual(py_utc, c_utc)
