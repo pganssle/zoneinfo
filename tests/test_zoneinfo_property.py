@@ -181,6 +181,9 @@ class CZoneInfoCacheTest(ZoneInfoCacheTest):
 class PythonCConsistencyTest(unittest.TestCase):
     """Tests that the C and Python versions do the same thing."""
 
+    def _is_ambiguous(self, dt):
+        return dt.replace(fold=not dt.fold).utcoffset() == dt.utcoffset()
+
     @hypothesis.given(dt=hypothesis.strategies.datetimes(), key=valid_keys())
     def test_same_str(self, dt, key):
         py_dt = dt.replace(tzinfo=py_zoneinfo.ZoneInfo(key))
@@ -207,7 +210,14 @@ class PythonCConsistencyTest(unittest.TestCase):
         py_dt = dt.astimezone(py_zoneinfo.ZoneInfo(key))
         c_dt = dt.astimezone(c_zoneinfo.ZoneInfo(key))
 
-        self.assertEqual(py_dt, c_dt)  # This is probably trivially true
+        # PEP 495 says that an inter-zone comparison between ambiguous
+        # datetimes is always False.
+        if py_dt != c_dt:
+            self.assertEqual(
+                self._is_ambiguous(py_dt),
+                self._is_ambiguous(c_dt),
+                (py_dt, c_dt),
+            )
 
         self.assertEqual(py_dt.tzname(), c_dt.tzname())
         self.assertEqual(py_dt.utcoffset(), c_dt.utcoffset())
