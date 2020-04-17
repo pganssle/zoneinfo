@@ -1610,6 +1610,14 @@ class ZoneDumpData:
 
     @classmethod
     def _populate_zonedump_data(cls):
+        def _Africa_Abidjan():
+            LMT = ZoneOffset("LMT", timedelta(seconds=-968))
+            GMT = ZoneOffset("GMT", ZERO)
+
+            return [
+                ZoneTransition(datetime(1912, 1, 1), LMT, GMT),
+            ]
+
         def _Africa_Casablanca():
             P00_s = ZoneOffset("+00", ZERO, ZERO)
             P01_d = ZoneOffset("+01", ONE_H, ONE_H)
@@ -1760,6 +1768,7 @@ class ZoneDumpData:
             ]
 
         cls._ZONEDUMP_DATA = {
+            "Africa/Abidjan": _Africa_Abidjan(),
             "Africa/Casablanca": _Africa_Casablanca(),
             "America/Los_Angeles": _America_Los_Angeles(),
             "America/Santiago": _America_Santiago(),

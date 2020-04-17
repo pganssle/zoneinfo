@@ -95,7 +95,8 @@ utcoff_to_dstoff(size_t *trans_idx, long *utcoffs, long *dstoffs,
                  size_t num_ttinfos);
 static int
 ts_to_local(size_t *trans_idx, int64_t *trans_utc, long *utcoff,
-            int64_t *trans_local[2], size_t num_transitions);
+            int64_t *trans_local[2], size_t num_ttinfos,
+            size_t num_transitions);
 
 static int
 parse_tz_str(PyObject *tz_str_obj, _tzrule *out);
@@ -905,7 +906,8 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
                      self->num_ttinfos);
 
     if (ts_to_local(trans_idx, self->trans_list_utc, utcoff,
-                    self->trans_list_wall, self->num_transitions)) {
+                    self->trans_list_wall, self->num_ttinfos,
+                    self->num_transitions)) {
         goto error;
     }
 
@@ -1930,7 +1932,8 @@ utcoff_to_dstoff(size_t *trans_idx, long *utcoffs, long *dstoffs,
  */
 static int
 ts_to_local(size_t *trans_idx, int64_t *trans_utc, long *utcoff,
-            int64_t *trans_local[2], size_t num_transitions)
+            int64_t *trans_local[2], size_t num_ttinfos,
+            size_t num_transitions)
 {
     if (num_transitions == 0) {
         return 0;
@@ -1947,7 +1950,7 @@ ts_to_local(size_t *trans_idx, int64_t *trans_utc, long *utcoff,
     }
 
     int64_t offset_0, offset_1, buff;
-    if (num_transitions > 1) {
+    if (num_ttinfos > 1) {
         offset_0 = utcoff[0];
         offset_1 = utcoff[trans_idx[0]];
 
