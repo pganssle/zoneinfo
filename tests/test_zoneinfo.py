@@ -132,6 +132,13 @@ class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
     module = py_zoneinfo
     class_name = "ZoneInfo"
 
+    def setUp(self):
+        super().setUp()
+
+        # This is necessary because various subclasses pull from different
+        # data sources (e.g. tzdata, V1 files, etc).
+        self.klass.clear_cache()
+
     @property
     def tzpath(self):
         return [ZONEINFO_DATA.tzpath]
@@ -394,6 +401,8 @@ class CZoneInfoDatetimeSubclassTest(DatetimeSubclassMixin, CZoneInfoTest):
 class ZoneInfoTestSubclass(ZoneInfoTest):
     @classmethod
     def setUpClass(cls):
+        super().setUpClass()
+
         class ZISubclass(cls.klass):
             pass
 
@@ -447,11 +456,6 @@ class TZDataTests(ZoneInfoTest):
     some of the tests (particularly those related to the far future) may break
     in the event that the time zone policies in the relevant time zones change.
     """
-
-    def setUp(self):
-        super().setUp()
-
-        self.klass.clear_cache()
 
     @property
     def tzpath(self):
