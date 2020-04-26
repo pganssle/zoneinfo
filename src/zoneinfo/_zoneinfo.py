@@ -97,7 +97,6 @@ class ZoneInfo(tzinfo):
             cls._weak_cache.clear()
             cls._strong_cache.clear()
 
-    # TODO: Handle `datetime.time` in these calls
     def utcoffset(self, dt):
         return self._find_trans(dt).utcoff
 
@@ -152,6 +151,12 @@ class ZoneInfo(tzinfo):
             return dt
 
     def _find_trans(self, dt):
+        if dt is None:
+            if self._fixed_offset:
+                return self._tz_after
+            else:
+                return _NO_TTINFO
+
         ts = self._get_local_timestamp(dt)
 
         lt = self._trans_local[dt.fold]
@@ -259,9 +264,35 @@ class ZoneInfo(tzinfo):
             else:
                 self._tz_after = _ttinfo_list[-1]
 
+        # Determine if this is a "fixed offset" zone, meaning that the output
+        # of the utcoffset, dst and tzname functions does not depend on the
+        # specific datetime passed.
+        #
+        # We make three simplifying assumptions here:
+        #
+        # 1. If _tz_after is not a _ttinfo, it has transitions that might
+        #    actually occur (it is possible to construct TZ strings that
+        #    specify STD and DST but no transitions ever occur, such as
+        #    AAA0BBB,0/0,J365/25).
+        # 2. If _ttinfo_list contains more than one _ttinfo object, the objects
+        #    represent different offsets.
+        # 3. _ttinfo_list contains no unused _ttinfos (in which case an
+        #    otherwise fixed-offset zone with extra _ttinfos defined may
+        #    appear to *not* be a fixed offset zone).
+        #
+        # Violations to these assumptions would be fairly exotic, and exotic
+        # zones should almost certainly not be used with datetime.time (the
+        # only thing that would be affected by this).
+        if len(_ttinfo_list) > 1 or not isinstance(self._tz_after, _ttinfo):
+            self._fixed_offset = False
+        elif not _ttinfo_list:
+            self._fixed_offset = True
+        else:
+            self._fixed_offset = _ttinfo_list[0] == self._tz_after
+
     @staticmethod
     def _utcoff_to_dstoff(trans_idx, utcoffsets, isdsts):
-        # Now we must transform our ttis and abbrs into `__ttinfo` objects,
+        # Now we must transform our ttis and abbrs into `_ttinfo` objects,
         # but there is an issue: .dst() must return a timedelta with the
         # difference between utcoffset() and the "standard" offset, but
         # the "base offset" and "DST offset" are not encoded in the file;
@@ -365,11 +396,21 @@ class _ttinfo:
         self.dstoff = dstoff
         self.tzname = tzname
 
+    def __eq__(self, other):
+        return (
+            self.utcoff == other.utcoff
+            and self.dstoff == other.dstoff
+            and self.tzname == other.tzname
+        )
+
     def __repr__(self):  # pragma: nocover
         return (
             f"{self.__class__.__name__}"
             + f"({self.utcoff}, {self.dstoff}, {self.tzname})"
         )
+
+
+_NO_TTINFO = _ttinfo(None, None, None)
 
 
 class _TZStr:

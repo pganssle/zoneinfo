@@ -149,6 +149,9 @@ class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
     def zones(self):
         return ZoneDumpData.transition_keys()
 
+    def fixed_offset_zones(self):
+        return ZoneDumpData.fixed_offset_zones()
+
     def load_transition_examples(self, key):
         return ZoneDumpData.load_transition_examples(key)
 
@@ -350,6 +353,28 @@ class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
 
                     dt_after = dt_after_utc.astimezone(zi)
                     self.assertEqual(dt_after.fold, 1, (dt_after, dt_utc))
+
+    def test_time_variable_offset(self):
+        # self.zones() only ever returns variable-offset zones
+        for key in self.zones():
+            zi = self.zone_from_key(key)
+            t = time(11, 15, 1, 34471, tzinfo=zi)
+
+            with self.subTest(key=key):
+                self.assertIs(t.tzname(), None)
+                self.assertIs(t.utcoffset(), None)
+                self.assertIs(t.dst(), None)
+
+    def test_time_fixed_offset(self):
+        for key, offset in self.fixed_offset_zones():
+            zi = self.zone_from_key(key)
+
+            t = time(11, 15, 1, 34471, tzinfo=zi)
+
+            with self.subTest(key=key):
+                self.assertEqual(t.tzname(), offset.tzname)
+                self.assertEqual(t.utcoffset(), offset.utcoffset)
+                self.assertEqual(t.dst(), offset.dst)
 
 
 class CZoneInfoTest(ZoneInfoTest):
@@ -593,6 +618,13 @@ class WeirdZoneTest(ZoneInfoTestBase):
                 self.assertEqual(dt.utcoffset(), offset.utcoffset)
                 self.assertEqual(dt.dst(), offset.dst)
 
+        # Test that offsets return None when using a datetime.time
+        t = time(0, tzinfo=zi)
+        with self.subTest("Testing datetime.time"):
+            self.assertIs(t.tzname(), None)
+            self.assertIs(t.utcoffset(), None)
+            self.assertIs(t.dst(), None)
+
     def test_tz_before_only(self):
         # From RFC 8536 Section 3.2:
         #
@@ -695,6 +727,27 @@ class WeirdZoneTest(ZoneInfoTestBase):
 
             self.assertEqual(dt_utc.astimezone(zi), dt)
             self.assertEqual(dt, dt_utc)
+
+    def test_fixed_offset_phantom_transition(self):
+        UTC = ZoneOffset("UTC", ZERO, ZERO)
+
+        transitions = [ZoneTransition(datetime(1970, 1, 1), UTC, UTC)]
+
+        after = "UTC0"
+        zf = self.construct_zone(transitions, after)
+        zi = self.klass.from_file(zf, key="UTC")
+
+        dt = datetime(2020, 1, 1, tzinfo=zi)
+        with self.subTest("datetime.datetime"):
+            self.assertEqual(dt.tzname(), UTC.tzname)
+            self.assertEqual(dt.utcoffset(), UTC.utcoffset)
+            self.assertEqual(dt.dst(), UTC.dst)
+
+        t = time(0, tzinfo=zi)
+        with self.subTest("datetime.time"):
+            self.assertEqual(t.tzname(), UTC.tzname)
+            self.assertEqual(t.utcoffset(), UTC.utcoffset)
+            self.assertEqual(t.dst(), UTC.dst)
 
     def construct_zone(self, transitions, after=None, version=3):
         # These are not used for anything, so we're not going to include
@@ -1619,10 +1672,23 @@ class ZoneDumpData:
         return cls._get_zonedump()[key]
 
     @classmethod
+    def fixed_offset_zones(cls):
+        if not cls._FIXED_OFFSET_ZONES:
+            cls._populate_fixed_offsets()
+
+        return cls._FIXED_OFFSET_ZONES.items()
+
+    @classmethod
     def _get_zonedump(cls):
         if not cls._ZONEDUMP_DATA:
             cls._populate_zonedump_data()
         return cls._ZONEDUMP_DATA
+
+    @classmethod
+    def _populate_fixed_offsets(cls):
+        cls._FIXED_OFFSET_ZONES = {
+            "UTC": ZoneOffset("UTC", ZERO, ZERO),
+        }
 
     @classmethod
     def _populate_zonedump_data(cls):
@@ -1796,4 +1862,5 @@ class ZoneDumpData:
             "Pacific/Kiritimati": _Pacific_Kiritimati(),
         }
 
-    _ZONEDUMP_DATA = {}
+    _ZONEDUMP_DATA = None
+    _FIXED_OFFSET_ZONES = None
