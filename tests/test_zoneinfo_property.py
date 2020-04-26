@@ -17,6 +17,7 @@ py_zoneinfo, c_zoneinfo = test_support.get_modules()
 UTC = datetime.timezone.utc
 MIN_UTC = datetime.datetime.min.replace(tzinfo=UTC)
 MAX_UTC = datetime.datetime.max.replace(tzinfo=UTC)
+ZERO = datetime.timedelta(0)
 
 
 def _valid_keys():
@@ -82,6 +83,19 @@ class ZoneInfoTest(ZoneInfoTestBase):
     def test_str(self, key):
         zi = self.klass(key)
         self.assertEqual(str(zi), key)
+
+    @hypothesis.given(
+        dt=hypothesis.strategies.one_of(
+            hypothesis.strategies.datetimes(), hypothesis.strategies.times()
+        )
+    )
+    def test_utc(self, dt):
+        zi = self.klass("UTC")
+        dt_zi = dt.replace(tzinfo=zi)
+
+        self.assertEqual(dt_zi.utcoffset(), ZERO)
+        self.assertEqual(dt_zi.dst(), ZERO)
+        self.assertEqual(dt_zi.tzname(), "UTC")
 
 
 class CZoneInfoTest(ZoneInfoTest):

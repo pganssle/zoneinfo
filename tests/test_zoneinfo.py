@@ -251,6 +251,14 @@ class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
                 with self.assertRaises(exc_type):
                     zone.fromutc(val)
 
+    def test_utc(self):
+        zi = self.klass("UTC")
+        dt = datetime(2020, 1, 1, tzinfo=zi)
+
+        self.assertEqual(dt.utcoffset(), ZERO)
+        self.assertEqual(dt.dst(), ZERO)
+        self.assertEqual(dt.tzname(), "UTC")
+
     def test_unambiguous(self):
         test_cases = []
         for key in self.zones():
