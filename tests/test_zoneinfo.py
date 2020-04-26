@@ -1618,9 +1618,6 @@ class ZoneDumpData:
     def load_transition_examples(cls, key):
         return cls._get_zonedump()[key]
 
-    # These are examples of a bunch of transitions that can be used in tests
-    # The format for each transition is:
-    #
     @classmethod
     def _get_zonedump(cls):
         if not cls._ZONEDUMP_DATA:
