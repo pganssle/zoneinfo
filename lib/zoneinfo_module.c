@@ -12,6 +12,7 @@ PyObject *_tzpath_find_tzfile = NULL;
 PyObject *_common_mod = NULL;
 
 typedef struct TransitionRuleType TransitionRuleType;
+typedef struct StrongCacheNode StrongCacheNode;
 
 typedef struct {
     PyObject *utcoff;
@@ -68,11 +69,20 @@ typedef struct {
     int8_t second;
 } DayRule;
 
+struct StrongCacheNode {
+    StrongCacheNode *next;
+    StrongCacheNode *prev;
+    PyObject *key;
+    PyObject *zone;
+};
+
 static PyTypeObject PyZoneInfo_ZoneInfoType;
 
 // Constants
 static PyObject *TIMEDELTA_CACHE = NULL;
 static PyObject *ZONEINFO_WEAK_CACHE = NULL;
+static StrongCacheNode *ZONEINFO_STRONG_CACHE = NULL;
+static size_t ZONEINFO_STRONG_CACHE_MAX_SIZE = 8;
 
 static const int EPOCHORDINAL = 719163;
 static int DAYS_IN_MONTH[] = {
@@ -145,6 +155,16 @@ is_leap_year(int year);
 
 static size_t
 _bisect(const int64_t value, const int64_t *arr, size_t size);
+
+static void
+eject_from_strong_cache(const PyTypeObject *const type, PyObject *key);
+static void
+clear_strong_cache(const PyTypeObject *const type);
+static void
+update_strong_cache(const PyTypeObject *const type, PyObject *key,
+                    PyObject *zone);
+static PyObject *
+zone_from_strong_cache(const PyTypeObject *const type, PyObject *key);
 
 static PyObject *
 zoneinfo_new_instance(PyTypeObject *type, PyObject *key)
@@ -229,9 +249,13 @@ zoneinfo_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         return NULL;
     }
 
+    PyObject *instance = zone_from_strong_cache(type, key);
+    if (instance != NULL) {
+        return instance;
+    }
+
     PyObject *weak_cache = get_weak_cache(type);
-    PyObject *instance =
-        PyObject_CallMethod(weak_cache, "get", "O", key, Py_None);
+    instance = PyObject_CallMethod(weak_cache, "get", "O", key, Py_None);
     if (instance == NULL) {
         return NULL;
     }
@@ -253,7 +277,7 @@ zoneinfo_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         }
     }
 
-    // TODO: Add strong cache
+    update_strong_cache(type, key, instance);
     return instance;
 }
 
@@ -362,13 +386,17 @@ zoneinfo_clear_cache(PyObject *cls, PyObject *args, PyObject *kwargs)
         return NULL;
     }
 
-    PyObject *weak_cache = get_weak_cache(cls);
+    PyTypeObject *type = (PyTypeObject *)cls;
+    PyObject *weak_cache = get_weak_cache(type);
 
     if (only_keys == NULL || only_keys == Py_None) {
         PyObject *rv = PyObject_CallMethod(weak_cache, "clear", NULL);
         if (rv != NULL) {
             Py_DECREF(rv);
         }
+
+        clear_strong_cache(type);
+        ZONEINFO_STRONG_CACHE = NULL;
     }
     else {
         PyObject *item = NULL;
@@ -384,6 +412,10 @@ zoneinfo_clear_cache(PyObject *cls, PyObject *args, PyObject *kwargs)
         }
 
         while ((item = PyIter_Next(iter))) {
+            // Remove from strong cache
+            eject_from_strong_cache(type, item);
+
+            // Remove from weak cache
             PyObject *tmp = PyObject_CallMethodObjArgs(weak_cache, pop, item,
                                                        Py_None, NULL);
 
@@ -2126,6 +2158,223 @@ get_local_timestamp(PyObject *dt, int64_t *local_ts)
 
 /////
 // Functions for cache handling
+
+/* Constructor for StrongCacheNode */
+static StrongCacheNode *
+strong_cache_node_new(PyObject *key, PyObject *zone)
+{
+    StrongCacheNode *node = PyMem_Malloc(sizeof(StrongCacheNode));
+    if (node == NULL) {
+        return NULL;
+    }
+
+    Py_INCREF(key);
+    Py_INCREF(zone);
+
+    node->next = NULL;
+    node->prev = NULL;
+    node->key = key;
+    node->zone = zone;
+
+    return node;
+}
+
+/* Destructor for StrongCacheNode */
+void
+strong_cache_node_free(StrongCacheNode *node)
+{
+    Py_XDECREF(node->key);
+    Py_XDECREF(node->zone);
+
+    PyMem_Free(node);
+}
+
+/* Frees all nodes at or after a specified root in the strong cache.
+ *
+ * This can be used on the root node to free the entire cache or it can be used
+ * to clear all nodes that have been expired (which, if everything is going
+ * right, will actually only be 1 node at a time).
+ */
+void
+strong_cache_free(StrongCacheNode *root)
+{
+    StrongCacheNode *node = root;
+    StrongCacheNode *next_node;
+    while (node != NULL) {
+        next_node = node->next;
+        strong_cache_node_free(node);
+
+        node = next_node;
+    }
+}
+
+/* Removes a node from the cache and update its neighbors.
+ *
+ * This is used both when ejecting a node from the cache and when moving it to
+ * the front of the cache.
+ */
+static void
+remove_from_strong_cache(StrongCacheNode *node)
+{
+    if (ZONEINFO_STRONG_CACHE == node) {
+        ZONEINFO_STRONG_CACHE = node->next;
+    }
+
+    if (node->prev != NULL) {
+        node->prev->next = node->next;
+    }
+
+    if (node->next != NULL) {
+        node->next->prev = node->prev;
+    }
+
+    node->next = NULL;
+    node->prev = NULL;
+}
+
+/* Retrieves the node associated with a key, if it exists.
+ *
+ * This traverses the strong cache until it finds a matching key and returns a
+ * pointer to the relevant node if found. Returns NULL if no node is found.
+ *
+ * root may be NULL, indicating an empty cache.
+ */
+static StrongCacheNode *
+find_in_strong_cache(const StrongCacheNode *const root, PyObject *const key)
+{
+    const StrongCacheNode *node = root;
+    while (node != NULL) {
+        if (PyObject_RichCompareBool(key, node->key, Py_EQ)) {
+            return (StrongCacheNode *)node;
+        }
+
+        node = node->next;
+    }
+
+    return NULL;
+}
+
+/* Ejects a given key from the class's strong cache, if applicable.
+ *
+ * This function is used to enable the per-key functionality in clear_cache.
+ */
+static void
+eject_from_strong_cache(const PyTypeObject *const type, PyObject *key)
+{
+    if (type != &PyZoneInfo_ZoneInfoType) {
+        return;
+    }
+
+    StrongCacheNode *node = find_in_strong_cache(ZONEINFO_STRONG_CACHE, key);
+    if (node != NULL) {
+        remove_from_strong_cache(node);
+
+        strong_cache_node_free(node);
+    }
+}
+
+/* Moves a node to the front of the LRU cache.
+ *
+ * The strong cache is an LRU cache, so whenever a given node is accessed, if
+ * it is not at the front of the cache, it needs to be moved there.
+ */
+static void
+move_strong_cache_node_to_front(StrongCacheNode **root, StrongCacheNode *node)
+{
+    StrongCacheNode *root_p = *root;
+    if (root_p == node) {
+        return;
+    }
+
+    remove_from_strong_cache(node);
+
+    node->prev = NULL;
+    node->next = root_p;
+
+    if (root_p != NULL) {
+        root_p->prev = node;
+    }
+
+    *root = node;
+}
+
+/* Retrieves a ZoneInfo from the strong cache if it's present.
+ *
+ * This function finds the ZoneInfo by key and if found will move the node to
+ * the front of the LRU cache and return a new reference to it. It returns NULL
+ * if the key is not in the cache.
+ *
+ * The strong cache is currently only implemented for the base class, so this
+ * always returns a cache miss for subclasses.
+ */
+static PyObject *
+zone_from_strong_cache(const PyTypeObject *const type, PyObject *const key)
+{
+    if (type != &PyZoneInfo_ZoneInfoType) {
+        return NULL;  // Strong cache currently only implemented for base class
+    }
+
+    StrongCacheNode *node = find_in_strong_cache(ZONEINFO_STRONG_CACHE, key);
+
+    if (node != NULL) {
+        move_strong_cache_node_to_front(&ZONEINFO_STRONG_CACHE, node);
+        Py_INCREF(node->zone);
+        return node->zone;
+    }
+
+    return NULL;  // Cache miss
+}
+
+/* Inserts a new key into the strong LRU cache.
+ *
+ * This function is only to be used after a cache miss — it creates a new node
+ * at the front of the cache and ejects any stale entries (keeping the size of
+ * the cache to at most ZONEINFO_STRONG_CACHE_MAX_SIZE).
+ */
+static void
+update_strong_cache(const PyTypeObject *const type, PyObject *key,
+                    PyObject *zone)
+{
+    if (type != &PyZoneInfo_ZoneInfoType) {
+        return;
+    }
+
+    StrongCacheNode *new_node = strong_cache_node_new(key, zone);
+
+    move_strong_cache_node_to_front(&ZONEINFO_STRONG_CACHE, new_node);
+
+    StrongCacheNode *node = new_node->next;
+    for (size_t i = 1; i < ZONEINFO_STRONG_CACHE_MAX_SIZE; ++i) {
+        if (node == NULL) {
+            return;
+        }
+        node = node->next;
+    }
+
+    // Everything beyond this point needs to be freed
+    if (node != NULL) {
+        if (node->prev != NULL) {
+            node->prev->next = NULL;
+        }
+        strong_cache_free(node);
+    }
+}
+
+/* Clears all entries into a type's strong cache.
+ *
+ * Because the strong cache is not implemented for subclasses, this is a no-op
+ * for everything except the base class.
+ */
+void
+clear_strong_cache(const PyTypeObject *const type)
+{
+    if (type != &PyZoneInfo_ZoneInfoType) {
+        return;
+    }
+
+    strong_cache_free(ZONEINFO_STRONG_CACHE);
+}
+
 static PyObject *
 new_weak_cache()
 {
@@ -2253,6 +2502,9 @@ module_free()
     if (!Py_REFCNT(ZONEINFO_WEAK_CACHE)) {
         ZONEINFO_WEAK_CACHE = NULL;
     }
+
+    strong_cache_free(ZONEINFO_STRONG_CACHE);
+    ZONEINFO_STRONG_CACHE = NULL;
 }
 
 static int
