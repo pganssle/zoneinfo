@@ -4,15 +4,14 @@ import struct
 def load_tzdata(key):
     import importlib.resources
 
-    # TODO: Proper error for malformed keys?
     components = key.split("/")
     package_name = ".".join(["tzdata.zoneinfo"] + components[:-1])
     resource_name = components[-1]
 
     try:
         return importlib.resources.open_binary(package_name, resource_name)
-    except (ImportError, FileNotFoundError) as e:
-        raise ValueError(f"No time zone found with key {key}") from e
+    except (ImportError, FileNotFoundError, UnicodeEncodeError) as e:
+        raise ZoneInfoNotFoundError(f"No time zone found with key {key}") from e
 
 
 def load_data(fobj):
@@ -155,3 +154,7 @@ class _TZifHeader:
         args = args + struct.unpack(">6l", stream.read(24))
 
         return cls(*args)
+
+
+class ZoneInfoNotFoundError(KeyError):
+    """Exception raised when a ZoneInfo key is not found."""
