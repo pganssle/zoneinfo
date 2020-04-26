@@ -11,6 +11,7 @@ dist/
 
 # Sphinx documentation
 docs/_build/
+docs/_output/
 
 # Testing and coverage
 .cache
