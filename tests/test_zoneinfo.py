@@ -196,8 +196,23 @@ class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
     def test_bad_keys(self):
         bad_keys = [
             "Eurasia/Badzone",  # Plausible but does not exist
+            "BZQ",
+            "America.Los_Angeles",
             "🇨🇦",  # Non-ascii
             "America/New\ud800York",  # Contains surrogate character
+        ]
+
+        for bad_key in bad_keys:
+            with self.assertRaises(self.module.ZoneInfoNotFoundError):
+                self.klass(bad_key)
+
+    def test_bad_keys_paths(self):
+        bad_keys = [
+            "/America/Los_Angeles",  # Absolute path
+            "America/Los_Angeles/",  # Trailing slash - not normalized
+            "../zoneinfo/America/Los_Angeles",  # Traverses above TZPATH
+            "America/../America/Los_Angeles",  # Not normalized
+            "America/./Los_Angeles",
         ]
 
         for bad_key in bad_keys:

@@ -1,6 +1,7 @@
-__all__ = ["ZoneInfo", "reset_tzpath", "TZPATH"]
+__all__ = ["ZoneInfo", "reset_tzpath", "TZPATH", "ZoneInfoNotFoundError"]
 
 from . import _tzpath
+from ._common import ZoneInfoNotFoundError
 from ._version import __version__
 
 try:
