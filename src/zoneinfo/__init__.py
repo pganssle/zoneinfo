@@ -1,4 +1,10 @@
-__all__ = ["ZoneInfo", "reset_tzpath", "TZPATH", "ZoneInfoNotFoundError"]
+__all__ = [
+    "ZoneInfo",
+    "reset_tzpath",
+    "TZPATH",
+    "ZoneInfoNotFoundError",
+    "InvalidTZPathWarning",
+]
 
 from . import _tzpath
 from ._common import ZoneInfoNotFoundError
@@ -10,6 +16,7 @@ except ImportError:
     from ._zoneinfo import ZoneInfo
 
 reset_tzpath = _tzpath.reset_tzpath
+InvalidTZPathWarning = _tzpath.InvalidTZPathWarning
 
 
 def __getattr__(name):
