@@ -1496,12 +1496,62 @@ class TzPathTest(TzPathUserMixin, ZoneInfoTestBase):
                     tzpath = self.module.TZPATH
                     self.assertSequenceEqual(tzpath, expected_result)
 
+    def test_env_variable_relative_paths(self):
+        test_cases = [
+            [("path/to/somewhere",), ()],
+            [
+                ("/usr/share/zoneinfo", "path/to/somewhere",),
+                ("/usr/share/zoneinfo",),
+            ],
+            [("../relative/path",), ()],
+            [
+                ("/usr/share/zoneinfo", "../relative/path",),
+                ("/usr/share/zoneinfo",),
+            ],
+            [("path/to/somewhere", "../relative/path",), ()],
+            [
+                (
+                    "/usr/share/zoneinfo",
+                    "path/to/somewhere",
+                    "../relative/path",
+                ),
+                ("/usr/share/zoneinfo",),
+            ],
+        ]
+
+        for input_paths, expected_paths in test_cases:
+            path_var = os.pathsep.join(input_paths)
+            with self.python_tzpath_context(path_var):
+                with self.subTest("warning", path_var=path_var):
+                    # Note: Per PEP 615 the warning is implementation-defined
+                    # behavior, other implementations need not warn.
+                    with self.assertWarns(self.module.InvalidTZPathWarning):
+                        self.module.reset_tzpath()
+
+                tzpath = self.module.TZPATH
+                with self.subTest("filtered", path_var=path_var):
+                    self.assertSequenceEqual(tzpath, expected_paths)
+
     def test_reset_tzpath_kwarg(self):
         self.module.reset_tzpath(to=["/a/b/c"])
 
         self.assertSequenceEqual(self.module.TZPATH, ("/a/b/c",))
 
-    def test_tzpath_error(self):
+    def test_reset_tzpath_relative_paths(self):
+        bad_values = [
+            ("path/to/somewhere",),
+            ("/usr/share/zoneinfo", "path/to/somewhere",),
+            ("../relative/path",),
+            ("/usr/share/zoneinfo", "../relative/path",),
+            ("path/to/somewhere", "../relative/path",),
+            ("/usr/share/zoneinfo", "path/to/somewhere", "../relative/path",),
+        ]
+        for input_paths in bad_values:
+            with self.subTest(input_paths=input_paths):
+                with self.assertRaises(ValueError):
+                    self.module.reset_tzpath(to=input_paths)
+
+    def test_tzpath_type_error(self):
         bad_values = [
             "/etc/zoneinfo:/usr/share/zoneinfo",
             b"/etc/zoneinfo:/usr/share/zoneinfo",
