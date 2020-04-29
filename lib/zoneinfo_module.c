@@ -43,6 +43,7 @@ typedef struct {
     _ttinfo *ttinfo_before;
     _tzrule tzrule_after;
     _ttinfo *_ttinfos;  // Unique array of ttinfos for ease of deallocation
+    unsigned char fixed_offset;
     unsigned char source;
 } PyZoneInfo_ZoneInfo;
 
@@ -78,12 +79,15 @@ struct StrongCacheNode {
 
 static PyTypeObject PyZoneInfo_ZoneInfoType;
 
-// Constants
+// Globals
 static PyObject *TIMEDELTA_CACHE = NULL;
 static PyObject *ZONEINFO_WEAK_CACHE = NULL;
 static StrongCacheNode *ZONEINFO_STRONG_CACHE = NULL;
 static size_t ZONEINFO_STRONG_CACHE_MAX_SIZE = 8;
 
+static _ttinfo NO_TTINFO = {NULL, NULL, NULL, 0};
+
+// Constants
 static const int EPOCHORDINAL = 719163;
 static int DAYS_IN_MONTH[] = {
     -1, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
@@ -132,6 +136,8 @@ static int
 build_ttinfo(long utcoffset, long dstoffset, PyObject *tzname, _ttinfo *out);
 static void
 xdecref_ttinfo(_ttinfo *ttinfo);
+static int
+ttinfo_eq(const _ttinfo *const tti0, const _ttinfo *const tti1);
 
 static int
 build_tzrule(PyObject *std_abbr, PyObject *dst_abbr, long std_offset,
@@ -784,6 +790,29 @@ xdecref_ttinfo(_ttinfo *ttinfo)
     }
 }
 
+/* Equality function for _ttinfo. */
+static int
+ttinfo_eq(const _ttinfo *const tti0, const _ttinfo *const tti1)
+{
+    int rv;
+    if ((rv = PyObject_RichCompareBool(tti0->utcoff, tti1->utcoff, Py_EQ)) <
+        1) {
+        goto end;
+    }
+
+    if ((rv = PyObject_RichCompareBool(tti0->dstoff, tti1->dstoff, Py_EQ)) <
+        1) {
+        goto end;
+    }
+
+    if ((rv = PyObject_RichCompareBool(tti0->tzname, tti1->tzname, Py_EQ)) <
+        1) {
+        goto end;
+    }
+end:
+    return rv;
+}
+
 /* Given a file-like object, this populates a ZoneInfo object
  *
  * The current version calls into a Python function to read the data from
@@ -1013,6 +1042,41 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
             Py_DECREF(tti_after->dstoff);
             tti_after->dstoff = tti->dstoff;
             Py_INCREF(tti_after->dstoff);
+        }
+    }
+
+    // Determine if this is a "fixed offset" zone, meaning that the output of
+    // the utcoffset, dst and tzname functions does not depend on the specific
+    // datetime passed.
+    //
+    // We make three simplifying assumptions here:
+    //
+    // 1. If tzrule_after is not std_only, it has transitions that might occur
+    //    (it is possible to construct TZ strings that specify STD and DST but
+    //    no transitions ever occur, such as AAA0BBB,0/0,J365/25).
+    // 2. If self->_ttinfos contains more than one _ttinfo object, the objects
+    //    represent different offsets.
+    // 3. self->ttinfos contains no unused _ttinfos (in which case an otherwise
+    //    fixed-offset zone with extra _ttinfos defined may appear to *not* be
+    //    a fixed offset zone).
+    //
+    // Violations to these assumptions would be fairly exotic, and exotic
+    // zones should almost certainly not be used with datetime.time (the
+    // only thing that would be affected by this).
+    if (self->num_ttinfos > 1 || !self->tzrule_after.std_only) {
+        self->fixed_offset = 0;
+    }
+    else if (self->num_ttinfos == 0) {
+        self->fixed_offset = 1;
+    }
+    else {
+        int constant_offset =
+            ttinfo_eq(&(self->_ttinfos[0]), &self->tzrule_after.std);
+        if (constant_offset < 0) {
+            goto error;
+        }
+        else {
+            self->fixed_offset = constant_offset;
         }
     }
 
@@ -2039,6 +2103,17 @@ _bisect(const int64_t value, const int64_t *arr, size_t size)
 static _ttinfo *
 find_ttinfo(PyZoneInfo_ZoneInfo *self, PyObject *dt)
 {
+    // datetime.time has a .tzinfo attribute that passes None as the dt
+    // argument; it only really has meaning for fixed-offset zones.
+    if (dt == Py_None) {
+        if (self->fixed_offset) {
+            return &(self->tzrule_after.std);
+        }
+        else {
+            return &NO_TTINFO;
+        }
+    }
+
     int64_t ts;
     if (get_local_timestamp(dt, &ts)) {
         return NULL;
@@ -2493,6 +2568,8 @@ module_free()
     Py_XDECREF(io_open);
     io_open = NULL;
 
+    xdecref_ttinfo(&NO_TTINFO);
+
     Py_XDECREF(TIMEDELTA_CACHE);
     if (!Py_REFCNT(TIMEDELTA_CACHE)) {
         TIMEDELTA_CACHE = NULL;
@@ -2546,6 +2623,16 @@ zoneinfomodule_exec(PyObject *m)
     _common_mod = PyImport_ImportModule("zoneinfo._common");
     if (_common_mod == NULL) {
         goto error;
+    }
+
+    if (NO_TTINFO.utcoff == NULL) {
+        NO_TTINFO.utcoff = Py_None;
+        NO_TTINFO.dstoff = Py_None;
+        NO_TTINFO.tzname = Py_None;
+
+        for (size_t i = 0; i < 3; ++i) {
+            Py_INCREF(Py_None);
+        }
     }
 
     if (initialize_caches()) {
