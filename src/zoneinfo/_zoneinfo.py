@@ -97,6 +97,10 @@ class ZoneInfo(tzinfo):
             cls._weak_cache.clear()
             cls._strong_cache.clear()
 
+    @property
+    def key(self):
+        return self._key
+
     def utcoffset(self, dt):
         return self._find_trans(dt).utcoff
 

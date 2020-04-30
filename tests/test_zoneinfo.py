@@ -179,6 +179,31 @@ class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
         with self.subTest(name="from file without key"):
             self.assertRegex(repr(zi_ff_nk), class_name)
 
+    def test_key_attribute(self):
+        key = next(iter(self.zones()))
+
+        def from_file_nokey(key):
+            with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
+                return self.klass.from_file(f)
+
+        constructors = (
+            ("Primary constructor", self.klass, key),
+            ("no_cache", self.klass.no_cache, key),
+            ("from_file", from_file_nokey, None),
+        )
+
+        for msg, constructor, expected in constructors:
+            zi = constructor(key)
+
+            # Ensure that the key attribute is set to the input to ``key``
+            with self.subTest(msg):
+                self.assertEqual(zi.key, expected)
+
+            # Ensure that the key attribute is read-only
+            with self.subTest(f"{msg}: readonly"):
+                with self.assertRaises(AttributeError):
+                    zi.key = "Some/Value"
+
     def test_bad_keys(self):
         bad_keys = [
             "Eurasia/Badzone",  # Plausible but does not exist

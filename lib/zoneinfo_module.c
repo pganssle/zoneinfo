@@ -1,4 +1,5 @@
 #include "Python.h"
+#include "structmember.h"
 
 #include <ctype.h>
 #include <stddef.h>
@@ -2538,6 +2539,15 @@ static PyMethodDef zoneinfo_methods[] = {
     {NULL} /* Sentinel */
 };
 
+static PyMemberDef zoneinfo_members[] = {
+    {"key",                              /* name */
+     offsetof(PyZoneInfo_ZoneInfo, key), /* offset */
+     T_OBJECT_EX,                        /* type */
+     READONLY,                           /* flags */
+     NULL /* docstring */},
+    {NULL}, /* Sentinel */
+};
+
 static PyTypeObject PyZoneInfo_ZoneInfoType = {
     PyVarObject_HEAD_INIT(NULL, 0)  //
         .tp_name = "zoneinfo.ZoneInfo",
@@ -2549,6 +2559,7 @@ static PyTypeObject PyZoneInfo_ZoneInfoType = {
     .tp_flags = (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE),
     /* .tp_doc = zoneinfo_doc, */
     .tp_methods = zoneinfo_methods,
+    .tp_members = zoneinfo_members,
     .tp_new = zoneinfo_new,
     .tp_dealloc = zoneinfo_dealloc,
 };
