@@ -58,23 +58,6 @@ def tearDownModule():
     shutil.rmtree(TEMP_DIR)
 
 
-class ZoneInfoTestBase(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.klass = cls.module.ZoneInfo
-        super().setUpClass()
-
-    @contextlib.contextmanager
-    def tzpath_context(self, tzpath, lock=TZPATH_LOCK):
-        with lock:
-            old_path = self.module.TZPATH
-            try:
-                self.module.reset_tzpath(tzpath)
-                yield
-            finally:
-                self.module.reset_tzpath(old_path)
-
-
 class TzPathUserMixin:
     """
     Adds a setUp() and tearDown() to make TZPATH manipulations thread-safe.
@@ -402,7 +385,8 @@ class CZoneInfoTest(ZoneInfoTest):
                 def __add__(self, other):
                     if other == timedelta(0):
                         return self
-                    return super().__add__(other)
+
+                    return super().__add__(other)  # pragma: nocover
 
             return SameAddSubclass(
                 dt.year,
