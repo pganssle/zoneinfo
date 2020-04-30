@@ -12,7 +12,7 @@ from ._version import __version__
 
 try:
     from ._czoneinfo import ZoneInfo
-except ImportError:
+except ImportError:  # pragma: nocover
     from ._zoneinfo import ZoneInfo
 
 reset_tzpath = _tzpath.reset_tzpath
