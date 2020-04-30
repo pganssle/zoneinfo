@@ -385,7 +385,8 @@ class CZoneInfoTest(ZoneInfoTest):
                 def __add__(self, other):
                     if other == timedelta(0):
                         return self
-                    return super().__add__(other)
+
+                    return super().__add__(other)  # pragma: nocover
 
             return SameAddSubclass(
                 dt.year,
