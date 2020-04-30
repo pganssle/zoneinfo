@@ -123,8 +123,12 @@ class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
         self.klass.clear_cache()
 
     @property
+    def zoneinfo_data(self):
+        return ZONEINFO_DATA
+
+    @property
     def tzpath(self):
-        return [ZONEINFO_DATA.tzpath]
+        return [self.zoneinfo_data.tzpath]
 
     def zone_from_key(self, key):
         return self.klass(key)
@@ -147,8 +151,8 @@ class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
                 self.assertEqual(str(zi), key)
 
         # Zones with no key constructed should have str(zone) == repr(zone)
-        file_key = ZONEINFO_DATA.keys[0]
-        file_path = ZONEINFO_DATA.path_from_key(file_key)
+        file_key = self.zoneinfo_data.keys[0]
+        file_path = self.zoneinfo_data.path_from_key(file_key)
 
         with open(file_path, "rb") as f:
             with self.subTest(test_name="Repr test", path=file_path):
@@ -165,8 +169,8 @@ class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
         with self.subTest(name="from key"):
             self.assertRegex(repr(zi), class_name)
 
-        file_key = ZONEINFO_DATA.keys[0]
-        file_path = ZONEINFO_DATA.path_from_key(file_key)
+        file_key = self.zoneinfo_data.keys[0]
+        file_path = self.zoneinfo_data.path_from_key(file_key)
         with open(file_path, "rb") as f:
             zi_ff = self.klass.from_file(f, key=file_key)
 
@@ -178,6 +182,31 @@ class ZoneInfoTest(TzPathUserMixin, ZoneInfoTestBase):
 
         with self.subTest(name="from file without key"):
             self.assertRegex(repr(zi_ff_nk), class_name)
+
+    def test_key_attribute(self):
+        key = next(iter(self.zones()))
+
+        def from_file_nokey(key):
+            with open(self.zoneinfo_data.path_from_key(key), "rb") as f:
+                return self.klass.from_file(f)
+
+        constructors = (
+            ("Primary constructor", self.klass, key),
+            ("no_cache", self.klass.no_cache, key),
+            ("from_file", from_file_nokey, None),
+        )
+
+        for msg, constructor, expected in constructors:
+            zi = constructor(key)
+
+            # Ensure that the key attribute is set to the input to ``key``
+            with self.subTest(msg):
+                self.assertEqual(zi.key, expected)
+
+            # Ensure that the key attribute is read-only
+            with self.subTest(f"{msg}: readonly"):
+                with self.assertRaises(AttributeError):
+                    zi.key = "Some/Value"
 
     def test_bad_keys(self):
         bad_keys = [
@@ -457,8 +486,8 @@ class CZoneInfoTestSubclass(ZoneInfoTest):
 
 class ZoneInfoV1Test(ZoneInfoTest):
     @property
-    def tzpath(self):
-        return [ZONEINFO_DATA_V1.tzpath]
+    def zoneinfo_data(self):
+        return ZONEINFO_DATA_V1
 
     def load_transition_examples(self, key):
         # We will discard zdump examples outside the range epoch +/- 2**31,
@@ -1266,8 +1295,12 @@ class ZoneInfoCacheTest(TzPathUserMixin, ZoneInfoTestBase):
         super().setUp()
 
     @property
+    def zoneinfo_data(self):
+        return ZONEINFO_DATA
+
+    @property
     def tzpath(self):
-        return [ZONEINFO_DATA.tzpath]
+        return [self.zoneinfo_data.tzpath]
 
     def test_ephemeral_zones(self):
         self.assertIs(
@@ -1355,8 +1388,12 @@ class ZoneInfoPickleTest(TzPathUserMixin, ZoneInfoTestBase):
         super().setUp()
 
     @property
+    def zoneinfo_data(self):
+        return ZONEINFO_DATA
+
+    @property
     def tzpath(self):
-        return [ZONEINFO_DATA.tzpath]
+        return [self.zoneinfo_data.tzpath]
 
     def test_cache_hit(self):
         zi_in = self.klass("Europe/Dublin")
@@ -1400,7 +1437,7 @@ class ZoneInfoPickleTest(TzPathUserMixin, ZoneInfoTestBase):
 
     def test_from_file(self):
         key = "Europe/Dublin"
-        with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
+        with open(self.zoneinfo_data.path_from_key(key), "rb") as f:
             zi_nokey = self.klass.from_file(f)
 
             f.seek(0)
@@ -1428,7 +1465,7 @@ class ZoneInfoPickleTest(TzPathUserMixin, ZoneInfoTestBase):
         zi_rt_0 = pickle.loads(pkl_0)
         self.assertIs(zi, zi_rt_0)
 
-        with open(ZONEINFO_DATA.path_from_key(key), "rb") as f:
+        with open(self.zoneinfo_data.path_from_key(key), "rb") as f:
             zi_ff = self.klass.from_file(f, key=key)
 
         pkl_1 = pickle.dumps(zi)

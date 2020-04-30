@@ -84,6 +84,12 @@ class ZoneInfoTest(ZoneInfoTestBase):
         zi = self.klass(key)
         self.assertEqual(str(zi), key)
 
+    @hypothesis.given(key=valid_keys())
+    def test_key(self, key):
+        zi = self.klass(key)
+
+        self.assertEqual(zi.key, key)
+
     @hypothesis.given(
         dt=hypothesis.strategies.one_of(
             hypothesis.strategies.datetimes(), hypothesis.strategies.times()
