@@ -228,6 +228,10 @@ class PythonCConsistencyTest(unittest.TestCase):
     @hypothesis.example(dt=MAX_UTC, key="Asia/Tokyo")
     @hypothesis.example(dt=MIN_UTC, key="America/New_York")
     @hypothesis.example(dt=MAX_UTC, key="America/New_York")
+    @hypothesis.example(
+        dt=datetime.datetime(2006, 10, 29, 5, 15, tzinfo=UTC),
+        key="America/New_York",
+    )
     def test_same_from_utc(self, dt, key):
         py_zi = py_zoneinfo.ZoneInfo(key)
         c_zi = c_zoneinfo.ZoneInfo(key)
