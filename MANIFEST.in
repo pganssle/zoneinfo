@@ -1,0 +1,19 @@
+include LICENSE *.rst *.toml *.yml *.yaml *.ini
+recursive-include licenses *
+graft .github
+
+# Stubs
+include src/zoneinfo/py.typed
+recursive-include src *.pyi
+
+# Tests
+include tox.ini
+recursive-include tests *.py
+
+# Documentation
+recursive-include docs *.png
+recursive-include docs *.svg
+recursive-include docs *.py
+recursive-include docs *.rst
+prune docs/_build
+prune docs/_output
