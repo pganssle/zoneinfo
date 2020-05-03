@@ -1,6 +1,7 @@
 import bisect
 import calendar
 import collections
+import functools
 import os
 import re
 import struct
@@ -16,15 +17,17 @@ EPOCHORDINAL = datetime(1970, 1, 1).toordinal()
 # It is relatively expensive to construct new timedelta objects, and in most
 # cases we're looking at the same deltas, like integer numbers of hours, etc.
 # To improve speed and memory use, we'll keep a dictionary with references
-# to the ones we've already used so far. Ideally this would be a
-# WeakValueDictionary, but timedelta doesn't support weak references.
+# to the ones we've already used so far.
 #
-# TODO: Add a mechanism for clearing the cache?
-_DELTA_CACHE = {}
-
-
+# Loading every time zone in the 2020a version of the time zone database
+# requires 447 timedeltas, which requires approximately the amount of space
+# that ZoneInfo("America/New_York") with 236 transitions takes up, so we will
+# set the cache size to 512 so that in the common case we always get cache
+# hits, but specifically crafted ZoneInfo objects don't leak arbitrary amounts
+# of memory.
+@functools.lru_cache(maxsize=512)
 def _load_timedelta(seconds):
-    return _DELTA_CACHE.setdefault(seconds, timedelta(seconds=seconds))
+    return timedelta(seconds=seconds)
 
 
 class ZoneInfo(tzinfo):
