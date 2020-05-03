@@ -1484,6 +1484,29 @@ class CZoneInfoPickleTest(ZoneInfoPickleTest):
     module = c_zoneinfo
 
 
+class CallingConventionTest(ZoneInfoTestBase):
+    """Tests for functions with restricted calling conventions."""
+
+    module = py_zoneinfo
+
+    @property
+    def zoneinfo_data(self):
+        return ZONEINFO_DATA
+
+    def test_from_file(self):
+        with open(self.zoneinfo_data.path_from_key("UTC"), "rb") as f:
+            with self.assertRaises(TypeError):
+                self.klass.from_file(fobj=f)
+
+    def test_clear_cache(self):
+        with self.assertRaises(TypeError):
+            self.klass.clear_cache(["UTC"])
+
+
+class CCallingConventionTest(CallingConventionTest):
+    module = c_zoneinfo
+
+
 class TzPathTest(TzPathUserMixin, ZoneInfoTestBase):
     module = py_zoneinfo
 

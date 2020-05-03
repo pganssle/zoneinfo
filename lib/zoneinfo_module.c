@@ -332,7 +332,7 @@ zoneinfo_from_file(PyTypeObject *type, PyObject *args, PyObject *kwargs)
     PyObject *key = Py_None;
     PyZoneInfo_ZoneInfo *self = NULL;
 
-    static char *kwlist[] = {"fobj", "key", NULL};
+    static char *kwlist[] = {"", "key", NULL};
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|O", kwlist, &file_obj,
                                      &key)) {
         return NULL;

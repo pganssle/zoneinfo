@@ -74,7 +74,7 @@ class ZoneInfo(tzinfo):
         return obj
 
     @classmethod
-    def from_file(cls, fobj, key=None):
+    def from_file(cls, fobj, /, key=None):
         obj = super().__new__(cls)
         obj._key = key
         obj._file_path = None
