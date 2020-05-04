@@ -953,9 +953,12 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
             goto error;
         }
 
-        isdst[i] = PyObject_IsTrue(num);
-        if (isdst[i] == -1) {
+        int isdst_with_error = PyObject_IsTrue(num);
+        if (isdst_with_error == -1) {
             goto error;
+        }
+        else {
+            isdst[i] = (unsigned char)isdst_with_error;
         }
     }
 
