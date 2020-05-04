@@ -1715,7 +1715,9 @@ class ZoneInfoData:
         with open(source_json, "rb") as f:
             zoneinfo_dict = json.load(f)
 
-        for key, value in zoneinfo_dict.items():
+        zoneinfo_data = zoneinfo_dict["data"]
+
+        for key, value in zoneinfo_data.items():
             self.keys.append(key)
             raw_data = self._decode_text(value)
 
