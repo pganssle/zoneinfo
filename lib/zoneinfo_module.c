@@ -643,7 +643,7 @@ zoneinfo_str(PyZoneInfo_ZoneInfo *self)
  * Objects constructed from ZoneInfo.from_file cannot be pickled.
  */
 static PyObject *
-zoneinfo_reduce(PyObject *obj_self)
+zoneinfo_reduce(PyObject *obj_self, PyObject *unused)
 {
     PyZoneInfo_ZoneInfo *self = (PyZoneInfo_ZoneInfo *)obj_self;
     if (self->source == SOURCE_FILE) {
@@ -2519,13 +2519,13 @@ zoneinfo_init_subclass(PyTypeObject *cls, PyObject *args, PyObject **kwargs)
 /////
 // Specify the ZoneInfo type
 static PyMethodDef zoneinfo_methods[] = {
-    {"clear_cache", (PyCFunction)zoneinfo_clear_cache,
+    {"clear_cache", (PyCFunction)(void (*)(void))zoneinfo_clear_cache,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Clear the ZoneInfo cache.")},
-    {"no_cache", (PyCFunction)zoneinfo_no_cache,
+    {"no_cache", (PyCFunction)(void (*)(void))zoneinfo_no_cache,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Get a new instance of ZoneInfo, bypassing the cache.")},
-    {"from_file", (PyCFunction)zoneinfo_from_file,
+    {"from_file", (PyCFunction)(void (*)(void))zoneinfo_from_file,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Create a ZoneInfo file from a file object.")},
     {"utcoffset", (PyCFunction)zoneinfo_utcoffset, METH_O,
@@ -2544,7 +2544,7 @@ static PyMethodDef zoneinfo_methods[] = {
      PyDoc_STR("Function for serialization with the pickle protocol.")},
     {"_unpickle", (PyCFunction)zoneinfo__unpickle, METH_VARARGS | METH_CLASS,
      PyDoc_STR("Private method used in unpickling.")},
-    {"__init_subclass__", (PyCFunction)zoneinfo_init_subclass,
+    {"__init_subclass__", (PyCFunction)(void (*)(void))zoneinfo_init_subclass,
      METH_VARARGS | METH_KEYWORDS,
      PyDoc_STR("Function to initialize subclasses.")},
     {NULL} /* Sentinel */
