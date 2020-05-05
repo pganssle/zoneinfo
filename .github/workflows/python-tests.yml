@@ -70,7 +70,18 @@ jobs:
         run: python -m pip install --upgrade pip tox
       - name: Run action
         run: |
-          if [[ $TOXENV  == "docs" ]]; then
+          if [[ $TOXENV == "build" ]]; then
+            CFLAGS="-std=c99"
+            CFLAGS+=" -Wall"
+            CFLAGS+=" -Werror"
+            CFLAGS+=" -Wextra"
+            CFLAGS+=" -Wno-unused-result"
+            CFLAGS+=" -Wno-unused-parameter"
+            CFLAGS+=" -Wno-missing-field-initializers"
+            export CFLAGS="${CFLAGS}"
+          fi
+
+          if [[ $TOXENV == "docs" ]]; then
             tox -- -j auto -bhtml -W -n -a --keep-going
           else
             tox

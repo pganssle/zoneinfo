@@ -643,7 +643,7 @@ zoneinfo_str(PyZoneInfo_ZoneInfo *self)
  * Objects constructed from ZoneInfo.from_file cannot be pickled.
  */
 static PyObject *
-zoneinfo_reduce(PyObject *obj_self)
+zoneinfo_reduce(PyObject *obj_self, PyObject *unused)
 {
     PyZoneInfo_ZoneInfo *self = (PyZoneInfo_ZoneInfo *)obj_self;
     if (self->source == SOURCE_FILE) {
@@ -953,9 +953,12 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
             goto error;
         }
 
-        isdst[i] = PyObject_IsTrue(num);
-        if (isdst[i] == -1) {
+        int isdst_with_error = PyObject_IsTrue(num);
+        if (isdst_with_error == -1) {
             goto error;
+        }
+        else {
+            isdst[i] = (unsigned char)isdst_with_error;
         }
     }
 
@@ -1204,7 +1207,15 @@ calendarrule_new(uint8_t month, uint8_t week, uint8_t day, int8_t hour,
         return -1;
     }
 
+    // day is an unsigned integer, so day < 0 should always return false, but
+    // if day's type changes to a signed integer *without* changing this value,
+    // it may create a bug. Considering that the compiler should be able to
+    // optimize out the first comparison if day is an unsigned integer anyway,
+    // we will leave this comparison in place and disable the compiler warning.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wtype-limits"
     if (day < 0 || day > 6) {
+#pragma GCC diagnostic pop
         PyErr_Format(PyExc_ValueError, "Day must be in [0, 6]");
         return -1;
     }
@@ -2508,13 +2519,13 @@ zoneinfo_init_subclass(PyTypeObject *cls, PyObject *args, PyObject **kwargs)
 /////
 // Specify the ZoneInfo type
 static PyMethodDef zoneinfo_methods[] = {
-    {"clear_cache", (PyCFunction)zoneinfo_clear_cache,
+    {"clear_cache", (PyCFunction)(void (*)(void))zoneinfo_clear_cache,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Clear the ZoneInfo cache.")},
-    {"no_cache", (PyCFunction)zoneinfo_no_cache,
+    {"no_cache", (PyCFunction)(void (*)(void))zoneinfo_no_cache,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Get a new instance of ZoneInfo, bypassing the cache.")},
-    {"from_file", (PyCFunction)zoneinfo_from_file,
+    {"from_file", (PyCFunction)(void (*)(void))zoneinfo_from_file,
      METH_VARARGS | METH_KEYWORDS | METH_CLASS,
      PyDoc_STR("Create a ZoneInfo file from a file object.")},
     {"utcoffset", (PyCFunction)zoneinfo_utcoffset, METH_O,
@@ -2533,7 +2544,7 @@ static PyMethodDef zoneinfo_methods[] = {
      PyDoc_STR("Function for serialization with the pickle protocol.")},
     {"_unpickle", (PyCFunction)zoneinfo__unpickle, METH_VARARGS | METH_CLASS,
      PyDoc_STR("Private method used in unpickling.")},
-    {"__init_subclass__", (PyCFunction)zoneinfo_init_subclass,
+    {"__init_subclass__", (PyCFunction)(void (*)(void))zoneinfo_init_subclass,
      METH_VARARGS | METH_KEYWORDS,
      PyDoc_STR("Function to initialize subclasses.")},
     {NULL} /* Sentinel */
