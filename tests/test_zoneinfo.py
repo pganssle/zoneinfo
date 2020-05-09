@@ -1628,6 +1628,10 @@ class CTzPathTest(TzPathTest):
 class TestModule(ZoneInfoTestBase):
     module = py_zoneinfo
 
+    @property
+    def zoneinfo_data(self):
+        return ZONEINFO_DATA
+
     def test_getattr_error(self):
         with self.assertRaises(AttributeError):
             self.module.NOATTRIBUTE
@@ -1647,6 +1651,34 @@ class TestModule(ZoneInfoTestBase):
         module_unique = set(module_dir)
 
         self.assertCountEqual(module_dir, module_unique)
+
+    def test_available_timezones(self):
+        with self.tzpath_context([self.zoneinfo_data.tzpath]):
+            self.assertTrue(self.zoneinfo_data.keys)  # Sanity check
+
+            available_keys = self.module.available_timezones()
+            zoneinfo_keys = set(self.zoneinfo_data.keys)
+
+            # If tzdata is not present, zoneinfo_keys == available_keys,
+            # otherwise it should be a subset.
+            union = zoneinfo_keys & available_keys
+            self.assertEqual(zoneinfo_keys, union)
+
+    def test_available_timezones_weirdzone(self):
+        zone_file = self.zoneinfo_data.path_from_key("UTC")
+
+        with tempfile.TemporaryDirectory() as td:
+            # Make a fictional zone at "Mars/Olympus_Mons"
+            mars_folder = os.path.join(td, "Mars")
+            os.mkdir(mars_folder)
+            shutil.copyfile(
+                self.zoneinfo_data.path_from_key("UTC"),
+                os.path.join(td, "Mars", "Olympus_Mons"),
+            )
+
+            with self.tzpath_context([td]):
+                available_keys = self.module.available_timezones()
+                self.assertIn("Mars/Olympus_Mons", available_keys)
 
 
 class CTestModule(TestModule):
