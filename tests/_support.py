@@ -10,8 +10,29 @@ TZPATH_LOCK = threading.Lock()
 TZPATH_TEST_LOCK = threading.Lock()
 
 
-@functools.lru_cache(1)
+def call_once(f):
+    """Decorator that ensures a function is only ever called once."""
+    lock = threading.Lock()
+    cached = functools.lru_cache(None)(f)
+
+    @functools.wraps(f)
+    def inner():
+        with lock:
+            return cached()
+
+    return inner
+
+
+@call_once
 def get_modules():
+    """Retrieve two copies of zoneinfo: pure Python and C accelerated.
+
+    Because this function manipulates the import system in a way that might
+    be fragile or do unexpected things if it is run many times, it uses a
+    `call_once` decorator to ensure that this is only ever called exactly
+    one time — in other words, when using this function you will only ever
+    get one copy of each module rather than a fresh import each time.
+    """
     # The standard import_fresh_module approach seems to be somewhat buggy
     # when it comes to C imports, so in the short term, we will do a little
     # module surgery to test this.
