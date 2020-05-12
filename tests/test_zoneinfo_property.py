@@ -301,3 +301,24 @@ class PythonCConsistencyTest(unittest.TestCase):
             return  # Consistently raises the same exception
 
         self.assertEqual(py_utc, c_utc)
+
+    @hypothesis.given(key=valid_keys())
+    def test_cross_module_pickle(self, key):
+        py_zi = py_zoneinfo.ZoneInfo(key)
+        c_zi = c_zoneinfo.ZoneInfo(key)
+
+        with test_support.set_zoneinfo_module(py_zoneinfo):
+            py_pkl = pickle.dumps(py_zi)
+
+        with test_support.set_zoneinfo_module(c_zoneinfo):
+            c_pkl = pickle.dumps(c_zi)
+
+        with test_support.set_zoneinfo_module(c_zoneinfo):
+            # Python → C
+            py_to_c_zi = pickle.loads(py_pkl)
+            self.assertIs(py_to_c_zi, c_zi)
+
+        with test_support.set_zoneinfo_module(py_zoneinfo):
+            # C → Python
+            c_to_py_zi = pickle.loads(c_pkl)
+            self.assertIs(c_to_py_zi, py_zi)
