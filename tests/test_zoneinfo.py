@@ -432,7 +432,7 @@ class CZoneInfoTest(ZoneInfoTest):
         subclass = [False, True]
 
         key = "Europe/London"
-        zi = self.zone_from_key("Europe/London")
+        zi = self.zone_from_key(key)
         for zt in self.load_transition_examples(key):
             if zt.fold and zt.offset_after.utcoffset == ZERO:
                 example = zt.transition_utc.replace(tzinfo=zi)
