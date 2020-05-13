@@ -574,20 +574,17 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
             PyObject *replace = PyObject_GetAttrString(tmp, "replace");
             PyObject *args = PyTuple_New(0);
             PyObject *kwargs = PyDict_New();
-            PyObject *one = PyLong_FromLong(1);
 
             Py_DECREF(tmp);
-            if (args == NULL || kwargs == NULL || replace == NULL ||
-                one == NULL) {
+            if (args == NULL || kwargs == NULL || replace == NULL) {
                 Py_XDECREF(args);
                 Py_XDECREF(kwargs);
                 Py_XDECREF(replace);
-                Py_XDECREF(one);
                 return NULL;
             }
 
             dt = NULL;
-            if (!PyDict_SetItemString(kwargs, "fold", one)) {
+            if (!PyDict_SetItemString(kwargs, "fold", _PyLong_One)) {
                 dt = PyObject_Call(replace, args, kwargs);
             }
 
