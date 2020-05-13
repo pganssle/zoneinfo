@@ -270,6 +270,7 @@ zoneinfo_new(PyTypeObject *type, PyObject *args, PyObject *kw)
     }
 
     if (instance == Py_None) {
+        Py_DECREF(instance);
         PyObject *tmp = zoneinfo_new_instance(type, key);
         if (tmp == NULL) {
             return NULL;
