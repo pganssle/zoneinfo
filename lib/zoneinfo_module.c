@@ -186,6 +186,7 @@ zoneinfo_new_instance(PyTypeObject *type, PyObject *key)
     else if (file_path == Py_None) {
         file_obj = PyObject_CallMethod(_common_mod, "load_tzdata", "O", key);
         if (file_obj == NULL) {
+            Py_DECREF(file_path);
             return NULL;
         }
     }
@@ -223,7 +224,8 @@ error:
     self = NULL;
 cleanup:
     if (file_obj != NULL) {
-        PyObject_CallMethod(file_obj, "close", NULL);
+        PyObject *tmp = PyObject_CallMethod(file_obj, "close", NULL);
+        Py_DECREF(tmp);
         Py_DECREF(file_obj);
     }
     Py_DECREF(file_path);
@@ -322,6 +324,8 @@ zoneinfo_dealloc(PyObject *obj_self)
 
     Py_XDECREF(self->key);
     Py_XDECREF(self->file_repr);
+
+    Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
 static PyObject *
