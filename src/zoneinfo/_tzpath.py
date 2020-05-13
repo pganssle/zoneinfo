@@ -10,7 +10,7 @@ def reset_tzpath(to=None):
         if isinstance(tzpaths, (str, bytes)):
             raise TypeError(
                 f"tzpaths must be a list or tuple, "
-                + f"not {type(tzpaths)}: {tzpaths}"
+                + f"not {type(tzpaths)}: {tzpaths!r}"
             )
         elif not all(map(os.path.isabs, tzpaths)):
             raise ValueError(_get_invalid_paths_message(tzpaths))
