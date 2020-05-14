@@ -8,9 +8,9 @@
 #include "datetime.h"
 
 // Imports
-PyObject *io_open = NULL;
-PyObject *_tzpath_find_tzfile = NULL;
-PyObject *_common_mod = NULL;
+static PyObject *io_open = NULL;
+static PyObject *_tzpath_find_tzfile = NULL;
+static PyObject *_common_mod = NULL;
 
 typedef struct TransitionRuleType TransitionRuleType;
 typedef struct StrongCacheNode StrongCacheNode;
