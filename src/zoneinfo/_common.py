@@ -11,6 +11,16 @@ def load_tzdata(key):
     try:
         return importlib.resources.open_binary(package_name, resource_name)
     except (ImportError, FileNotFoundError, UnicodeEncodeError) as e:
+        # There are three types of exception that can be raised that all amount
+        # to "we cannot find this key":
+        #
+        # ImportError: If package_name doesn't exist (e.g. if tzdata is not
+        #   installed, or if there's an error in the folder name like
+        #   Amrica/New_York)
+        # FileNotFoundError: If resource_name doesn't exist in the package
+        #   (e.g. Europe/Krasnoy)
+        # UnicodeEncodeError: If package_name or resource_name are not UTF-8,
+        #   such as keys containing a surrogate character.
         raise ZoneInfoNotFoundError(f"No time zone found with key {key}") from e
 
 
