@@ -657,8 +657,7 @@ def _parse_tz_str(tz_str):
     dst_abbr = m.group("dst")
     dst_offset = None
 
-    if std_abbr:
-        std_abbr = std_abbr.strip("<>")
+    std_abbr = std_abbr.strip("<>")
 
     if dst_abbr:
         dst_abbr = dst_abbr.strip("<>")
