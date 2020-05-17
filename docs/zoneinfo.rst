@@ -347,6 +347,10 @@ Functions
     anywhere on the time zone path. This is recalculated on every call to the
     function.
 
+    This function only includes canonical zone names and does not include
+    "special" zones such as those under the ``posix/`` and ``right/``
+    directories, or the ``posixrules`` zone.
+
     .. caution::
 
         This function may open a large number of files, as the best way to
