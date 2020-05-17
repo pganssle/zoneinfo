@@ -20,7 +20,47 @@ MAX_UTC = datetime.datetime.max.replace(tzinfo=UTC)
 ZERO = datetime.timedelta(0)
 
 
-VALID_KEYS = sorted(zoneinfo.available_timezones())
+def _valid_keys():
+    """Get available time zones, including posix/ and right/ directories."""
+    available_zones = sorted(zoneinfo.available_timezones())
+    TZPATH = zoneinfo.TZPATH
+
+    def valid_key(key):
+        for root in TZPATH:
+            key_file = os.path.join(root, key)
+            if os.path.exists(key_file):
+                return True
+
+        components = key.split("/")
+        package_name = ".".join(["tzdata.zoneinfo"] + components[:-1])
+        resource_name = components[-1]
+
+        try:
+            return resources.is_resource(package_name, resource_name)
+        except ModuleNotFoundError:
+            return False
+
+    # This relies on the fact that dictionaries maintain insertion order — for
+    # shrinking purposes, it is preferable to start with the standard version,
+    # then move to the posix/ version, then to the right/ version.
+    out_zones = {"": available_zones}
+    for prefix in ["posix", "right"]:
+        prefix_out = []
+        for key in available_zones:
+            prefix_key = f"{prefix}/{key}"
+            if valid_key(prefix_key):
+                prefix_out.append(prefix_key)
+
+        out_zones[prefix] = prefix_out
+
+    output = []
+    for keys in out_zones.values():
+        output.extend(keys)
+
+    return output
+
+
+VALID_KEYS = _valid_keys()
 if not VALID_KEYS:
     pytest.skip("No time zone data available", allow_module_level=True)
 
