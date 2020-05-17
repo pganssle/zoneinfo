@@ -143,7 +143,15 @@ def available_timezones():
         if not os.path.exists(tz_root):
             continue
 
-        for root, _, files in os.walk(tz_root):
+        for root, dirnames, files in os.walk(tz_root):
+            if root == tz_root:
+                # right/ and posix/ are special directories and shouldn't be
+                # included in the output of available zones
+                if "right" in dirnames:
+                    dirnames.remove("right")
+                if "posix" in dirnames:
+                    dirnames.remove("posix")
+
             for file in files:
                 fpath = os.path.join(root, file)
 
@@ -156,6 +164,11 @@ def available_timezones():
 
                 if valid_key(fpath):
                     valid_zones.add(key)
+
+    if "posixrules" in valid_zones:
+        # posixrules is a special symlink-only time zone where it exists, it
+        # should not be included in the output
+        valid_zones.remove("posixrules")
 
     return valid_zones
 
