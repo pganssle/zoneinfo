@@ -432,7 +432,7 @@ class CZoneInfoTest(ZoneInfoTest):
         subclass = [False, True]
 
         key = "Europe/London"
-        zi = self.zone_from_key("Europe/London")
+        zi = self.zone_from_key(key)
         for zt in self.load_transition_examples(key):
             if zt.fold and zt.offset_after.utcoffset == ZERO:
                 example = zt.transition_utc.replace(tzinfo=zi)
@@ -1651,6 +1651,30 @@ class TestModule(ZoneInfoTestBase):
 
 class CTestModule(TestModule):
     module = c_zoneinfo
+
+
+class ExtensionBuiltTest(unittest.TestCase):
+    """Smoke test to ensure that the C and Python extensions are both tested.
+
+    Because the intention is for the Python and C versions of ZoneInfo to
+    behave identically, these tests necessarily rely on implementation details,
+    so the tests may need to be adjusted if the implementations change. Do not
+    rely on these tests as an indication of stable properties of these classes.
+    """
+
+    def test_cache_location(self):
+        # The pure Python version stores caches on attributes, but the C
+        # extension stores them in C globals (at least for now)
+        self.assertFalse(hasattr(c_zoneinfo.ZoneInfo, "_weak_cache"))
+        self.assertTrue(hasattr(py_zoneinfo.ZoneInfo, "_weak_cache"))
+
+    def test_gc_tracked(self):
+        # The pure Python version is tracked by the GC but (for now) the C
+        # version is not.
+        import gc
+
+        self.assertTrue(gc.is_tracked(py_zoneinfo.ZoneInfo))
+        self.assertFalse(gc.is_tracked(c_zoneinfo.ZoneInfo))
 
 
 @dataclasses.dataclass(frozen=True)
