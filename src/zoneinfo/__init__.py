@@ -1,6 +1,7 @@
 __all__ = [
     "ZoneInfo",
     "reset_tzpath",
+    "available_timezones",
     "TZPATH",
     "ZoneInfoNotFoundError",
     "InvalidTZPathWarning",
@@ -16,6 +17,7 @@ except ImportError:  # pragma: nocover
     from ._zoneinfo import ZoneInfo
 
 reset_tzpath = _tzpath.reset_tzpath
+available_timezones = _tzpath.available_timezones
 InvalidTZPathWarning = _tzpath.InvalidTZPathWarning
 
 

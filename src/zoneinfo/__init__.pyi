@@ -24,5 +24,6 @@ class ZoneInfo(tzinfo):
 def reset_tzpath(
     to: Optional[Sequence[Union[os.PathLike, str]]] = None
 ) -> None: ...
+def available_timezones() -> typing.Set[str]: ...
 
 TZPATH: Sequence[str]

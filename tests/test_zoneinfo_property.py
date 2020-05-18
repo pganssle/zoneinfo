@@ -21,50 +21,43 @@ ZERO = datetime.timedelta(0)
 
 
 def _valid_keys():
-    """Determine all valid ZoneInfo keys available on the search path.
+    """Get available time zones, including posix/ and right/ directories."""
+    available_zones = sorted(zoneinfo.available_timezones())
+    TZPATH = zoneinfo.TZPATH
 
-    A note of caution: This may attempt to open a large number of files.
-    """
+    def valid_key(key):
+        for root in TZPATH:
+            key_file = os.path.join(root, key)
+            if os.path.exists(key_file):
+                return True
 
-    valid_zones = set()
+        components = key.split("/")
+        package_name = ".".join(["tzdata.zoneinfo"] + components[:-1])
+        resource_name = components[-1]
 
-    # Start with loading from the tzdata package if it exists: this has a
-    # pre-assembled list of zones that only requires opening one file.
-    try:
-        with resources.open_text("tzdata", "zones") as f:
-            for zone in f:
-                zone = zone.strip()
-                if zone:
-                    valid_zones.add(zone)
-    except (ImportError, FileNotFoundError):
-        pass
-
-    def valid_key(fpath):
         try:
-            with open(fpath, "rb") as f:
-                return f.read(4) == b"TZif"
-        except Exception:  # pragma: nocover
-            pass
+            return resources.is_resource(package_name, resource_name)
+        except ModuleNotFoundError:
+            return False
 
-    for tz_root in zoneinfo.TZPATH:
-        if not os.path.exists(tz_root):
-            continue
+    # This relies on the fact that dictionaries maintain insertion order — for
+    # shrinking purposes, it is preferable to start with the standard version,
+    # then move to the posix/ version, then to the right/ version.
+    out_zones = {"": available_zones}
+    for prefix in ["posix", "right"]:
+        prefix_out = []
+        for key in available_zones:
+            prefix_key = f"{prefix}/{key}"
+            if valid_key(prefix_key):
+                prefix_out.append(prefix_key)
 
-        for root, _, files in os.walk(tz_root):
-            for file in files:
-                fpath = os.path.join(root, file)
+        out_zones[prefix] = prefix_out
 
-                key = os.path.relpath(fpath, start=tz_root)
-                if os.sep != "/":  # pragma: nocover
-                    key = key.replace(os.sep, "/")
+    output = []
+    for keys in out_zones.values():
+        output.extend(keys)
 
-                if not key or key in valid_zones:
-                    continue
-
-                if valid_key(fpath):
-                    valid_zones.add(key)
-
-    return sorted(valid_zones)
+    return output
 
 
 VALID_KEYS = _valid_keys()

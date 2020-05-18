@@ -5,7 +5,7 @@ import io
 import typing
 from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Callable, Optional, Sequence, Set, Tuple
 
 import zoneinfo
 
@@ -98,6 +98,14 @@ def test_astimezone() -> Sequence[datetime]:
     assert dt == dt_utc
 
     return (dt, dt_rt, dt_utc)
+
+
+def test_available_timezones() -> Set[str]:
+    valid_zones = zoneinfo.available_timezones()
+
+    assert "America/Los_Angeles" in valid_zones
+
+    return valid_zones
 
 
 def call_functions() -> None:
