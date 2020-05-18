@@ -1656,7 +1656,7 @@ class TestModule(ZoneInfoTestBase):
 
         tz_root must exist, but all folders below that will be created.
         """
-        if not os.path.exists(tz_root):
+        if not os.path.exists(tz_root):  # pragma: nocover
             raise FileNotFoundError(f"{tz_root} does not exist.")
 
         root_dir, *tail = key.rsplit("/", 1)
