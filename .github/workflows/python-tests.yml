@@ -79,6 +79,7 @@ jobs:
             CFLAGS+=" -Wno-unused-parameter"
             CFLAGS+=" -Wno-missing-field-initializers"
             export CFLAGS="${CFLAGS}"
+            TOXENV="build,build-check"
           fi
 
           if [[ $TOXENV == "docs" ]]; then
