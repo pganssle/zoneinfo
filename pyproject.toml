@@ -6,7 +6,6 @@ build-backend = "setuptools.build_meta"
 line-length = 80
 
 [tool.coverage.run]
-source = ["zoneinfo"]
 omit = ["tests/typing_example.py"]
 
 [tool.coverage.paths]

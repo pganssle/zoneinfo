@@ -6,7 +6,7 @@
 
 # -- Project information -----------------------------------------------------
 
-project = "zoneinfo"
+project = "backports.zoneinfo"
 author = "Paul Ganssle"
 copyright = f"2020, {author}"
 

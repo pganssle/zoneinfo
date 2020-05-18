@@ -19,7 +19,7 @@ import pathlib
 import textwrap
 import typing
 
-import zoneinfo
+import backports.zoneinfo as zoneinfo
 
 KEYS = [
     "Africa/Abidjan",

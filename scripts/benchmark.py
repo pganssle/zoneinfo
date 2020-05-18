@@ -5,12 +5,12 @@ import timeit
 from datetime import datetime, timedelta, timezone
 
 import click
-
 import pint
 import pytz
 from dateutil import tz
-from zoneinfo import ZoneInfo
-from zoneinfo._zoneinfo import ZoneInfo as PyZoneInfo
+
+from backports.zoneinfo import ZoneInfo
+from backports.zoneinfo._zoneinfo import ZoneInfo as PyZoneInfo
 
 _PINT_REGISTRY = pint.UnitRegistry()
 S = _PINT_REGISTRY.s
