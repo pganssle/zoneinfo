@@ -20,6 +20,16 @@ skip_covered = true
 atomic=true
 force_grid_wrap=0
 include_trailing_comma=true
+known_first_party = ["backports.zoneinfo"]
+known_third_party=[
+    "click",
+    "dateutil",
+    "hypothesis",
+    "pint",
+    "pytest",
+    "pytz",
+    "requests",
+]
 multi_line_output=3
 not_skip="__init__.py"
 use_parentheses=true
