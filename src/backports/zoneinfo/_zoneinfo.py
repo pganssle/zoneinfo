@@ -34,7 +34,7 @@ class ZoneInfo(tzinfo):
     _strong_cache_size = 8
     _strong_cache = collections.OrderedDict()
     _weak_cache = weakref.WeakValueDictionary()
-    __module__ = "zoneinfo"
+    __module__ = "backports.zoneinfo"
 
     def __init_subclass__(cls):
         cls._strong_cache = collections.OrderedDict()

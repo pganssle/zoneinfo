@@ -7,7 +7,7 @@ from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional, Sequence, Set, Tuple
 
-import zoneinfo
+import backports.zoneinfo as zoneinfo
 
 REGISTERED_FUNCTIONS = []
 

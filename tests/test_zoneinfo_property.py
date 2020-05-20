@@ -7,7 +7,8 @@ from importlib import resources
 
 import hypothesis
 import pytest
-import zoneinfo
+
+from backports import zoneinfo
 
 from . import _support as test_support
 from ._support import ZoneInfoTestBase

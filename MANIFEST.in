@@ -3,7 +3,7 @@ recursive-include licenses *
 graft .github
 
 # Stubs
-include src/zoneinfo/py.typed
+include src/backports/zoneinfo/py.typed
 recursive-include src *.pyi
 
 # Tests

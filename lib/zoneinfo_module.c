@@ -2570,7 +2570,7 @@ static PyMemberDef zoneinfo_members[] = {
 
 static PyTypeObject PyZoneInfo_ZoneInfoType = {
     PyVarObject_HEAD_INIT(NULL, 0)  //
-        .tp_name = "zoneinfo.ZoneInfo",
+        .tp_name = "backports.zoneinfo.ZoneInfo",
     .tp_basicsize = sizeof(PyZoneInfo_ZoneInfo),
     .tp_weaklistoffset = offsetof(PyZoneInfo_ZoneInfo, weakreflist),
     .tp_repr = (reprfunc)zoneinfo_repr,
@@ -2628,7 +2628,8 @@ zoneinfomodule_exec(PyObject *m)
     PyModule_AddObject(m, "ZoneInfo", (PyObject *)&PyZoneInfo_ZoneInfoType);
 
     /* Populate imports */
-    PyObject *_tzpath_module = PyImport_ImportModule("zoneinfo._tzpath");
+    PyObject *_tzpath_module =
+        PyImport_ImportModule("backports.zoneinfo._tzpath");
     if (_tzpath_module == NULL) {
         goto error;
     }
@@ -2651,7 +2652,7 @@ zoneinfomodule_exec(PyObject *m)
         goto error;
     }
 
-    _common_mod = PyImport_ImportModule("zoneinfo._common");
+    _common_mod = PyImport_ImportModule("backports.zoneinfo._common");
     if (_common_mod == NULL) {
         goto error;
     }
@@ -2681,7 +2682,7 @@ static PyModuleDef_Slot zoneinfomodule_slots[] = {
 
 static struct PyModuleDef zoneinfomodule = {
     PyModuleDef_HEAD_INIT,
-    .m_name = "zoneinfo._czoneinfo",
+    .m_name = "backports.zoneinfo._czoneinfo",
     .m_doc = "C implementation of the zoneinfo module",
     .m_size = 0,
     .m_methods = module_methods,

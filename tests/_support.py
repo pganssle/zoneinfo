@@ -36,10 +36,12 @@ def get_modules():
     # The standard import_fresh_module approach seems to be somewhat buggy
     # when it comes to C imports, so in the short term, we will do a little
     # module surgery to test this.
-    py_module, c_module = (import_fresh_module("zoneinfo") for _ in range(2))
+    py_module, c_module = (
+        import_fresh_module("backports.zoneinfo") for _ in range(2)
+    )
 
-    from zoneinfo import _zoneinfo as py_zoneinfo
-    from zoneinfo import _czoneinfo as c_zoneinfo
+    from backports.zoneinfo import _zoneinfo as py_zoneinfo
+    from backports.zoneinfo import _czoneinfo as c_zoneinfo
 
     py_module.ZoneInfo = py_zoneinfo.ZoneInfo
     c_module.ZoneInfo = c_zoneinfo.ZoneInfo
@@ -57,11 +59,11 @@ def set_zoneinfo_module(module):
     """
 
     NOT_PRESENT = object()
-    old_zoneinfo = sys.modules.get("zoneinfo", NOT_PRESENT)
-    sys.modules["zoneinfo"] = module
+    old_zoneinfo = sys.modules.get("backports.zoneinfo", NOT_PRESENT)
+    sys.modules["backports.zoneinfo"] = module
     yield
     if old_zoneinfo is not NOT_PRESENT:
-        sys.modules["zoneinfo"] = old_zoneinfo
+        sys.modules["backports.zoneinfo"] = old_zoneinfo
 
 
 class ZoneInfoTestBase(unittest.TestCase):
