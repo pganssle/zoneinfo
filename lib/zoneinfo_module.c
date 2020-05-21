@@ -7,6 +7,13 @@
 
 #include "datetime.h"
 
+#if PY_VERSION_HEX < 0x03070000
+#define ATLEAST_37
+#ifdef MS_WINDOWS
+#undef _tzname
+#endif
+#endif
+
 // Imports
 static PyObject *io_open = NULL;
 static PyObject *_tzpath_find_tzfile = NULL;
@@ -574,9 +581,17 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
             PyObject *replace = PyObject_GetAttrString(tmp, "replace");
             PyObject *args = PyTuple_New(0);
             PyObject *kwargs = PyDict_New();
+            PyObject *one = NULL;
+
+#ifdef ATLEAST_37
+            one = PyLong_FromLong(1);
+#else
+            one = _PyLong_One;
+#endif
 
             Py_DECREF(tmp);
-            if (args == NULL || kwargs == NULL || replace == NULL) {
+            if (args == NULL || kwargs == NULL || replace == NULL ||
+                one == NULL) {
                 Py_XDECREF(args);
                 Py_XDECREF(kwargs);
                 Py_XDECREF(replace);
@@ -584,13 +599,16 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
             }
 
             dt = NULL;
-            if (!PyDict_SetItemString(kwargs, "fold", _PyLong_One)) {
+            if (!PyDict_SetItemString(kwargs, "fold", one)) {
                 dt = PyObject_Call(replace, args, kwargs);
             }
 
             Py_DECREF(args);
             Py_DECREF(kwargs);
             Py_DECREF(replace);
+#ifndef ATLEAST_37
+            Py_DECREF(one);
+#endif
 
             if (dt == NULL) {
                 return NULL;
