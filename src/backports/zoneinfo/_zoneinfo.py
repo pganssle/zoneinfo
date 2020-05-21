@@ -78,7 +78,7 @@ class ZoneInfo(tzinfo):
         return obj
 
     @classmethod
-    def from_file(cls, fobj, /, key=None):
+    def from_file(cls, fobj, key=None):
         obj = super().__new__(cls)
         obj._key = key
         obj._file_path = None
@@ -216,7 +216,7 @@ class ZoneInfo(tzinfo):
         )
 
     @classmethod
-    def _unpickle(cls, key, from_cache, /):
+    def _unpickle(cls, key, from_cache):
         if from_cache:
             return cls(key)
         else:
@@ -662,7 +662,8 @@ def _parse_tz_str(tz_str):
     if dst_abbr:
         dst_abbr = dst_abbr.strip("<>")
 
-    if std_offset := m.group("stdoff"):
+    std_offset = m.group("stdoff")
+    if std_offset:
         try:
             std_offset = _parse_tz_delta(std_offset)
         except ValueError as e:
@@ -671,7 +672,8 @@ def _parse_tz_str(tz_str):
         std_offset = 0
 
     if dst_abbr is not None:
-        if dst_offset := m.group("dstoff"):
+        dst_offset = m.group("dstoff")
+        if dst_offset:
             try:
                 dst_offset = _parse_tz_delta(dst_offset)
             except ValueError as e:

@@ -115,7 +115,6 @@ def load_data(fobj):
         assert c == b"\n", c
 
         tz_bytes = b""
-        # TODO: Walrus operator
         while True:
             c = fobj.read(1)
             if c == b"\n":

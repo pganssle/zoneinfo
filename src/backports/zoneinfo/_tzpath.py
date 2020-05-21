@@ -68,12 +68,27 @@ def _get_invalid_paths_message(tzpaths):
     )
 
 
+if sys.version_info < (3, 8):
+
+    def _isfile(path):
+        # bpo-33721: In Python 3.8 non-UTF8 paths return False rather than
+        # raising an error. See https://bugs.python.org/issue33721
+        try:
+            return os.path.isfile(path)
+        except ValueError:
+            return False
+
+
+else:
+    _isfile = os.path.isfile
+
+
 def find_tzfile(key):
     """Retrieve the path to a TZif file from a key."""
     _validate_tzfile_path(key)
     for search_path in TZPATH:
         filepath = os.path.join(search_path, key)
-        if os.path.isfile(filepath):
+        if _isfile(filepath):
             return filepath
 
     return None

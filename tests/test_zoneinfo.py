@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import contextlib
 import dataclasses
-import importlib.metadata
 import io
 import json
 import lzma
@@ -16,7 +15,6 @@ import struct
 import tempfile
 import unittest
 from datetime import date, datetime, time, timedelta, timezone
-from functools import cached_property
 
 from . import _support as test_support
 from ._support import (
@@ -26,12 +24,23 @@ from ._support import (
     ZoneInfoTestBase,
 )
 
+try:
+    from functools import cached_property
+except ImportError:
+    cached_property = property
+
+
+try:
+    import importlib.metadata as importlib_metadata
+except ImportError:
+    import importlib_metadata
+
 py_zoneinfo, c_zoneinfo = test_support.get_modules()
 
 try:
-    importlib.metadata.metadata("tzdata")
+    importlib_metadata.metadata("tzdata")
     HAS_TZDATA_PKG = True
-except importlib.metadata.PackageNotFoundError:
+except importlib_metadata.PackageNotFoundError:
     HAS_TZDATA_PKG = False
 
 ZONEINFO_DATA = None
@@ -1507,6 +1516,12 @@ class CallingConventionTest(ZoneInfoTestBase):
         return ZONEINFO_DATA
 
     def test_from_file(self):
+        if self.module is py_zoneinfo:
+            self.skipTest(
+                "Positional-only arguments not enforced in pure "
+                "Python in order to support pre-3.8 Python versions."
+            )
+
         with open(self.zoneinfo_data.path_from_key("UTC"), "rb") as f:
             with self.assertRaises(TypeError):
                 self.klass.from_file(fobj=f)
