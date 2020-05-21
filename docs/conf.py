@@ -40,4 +40,4 @@ html_theme = "python_docs_theme"
 html_static_path = []
 
 # For cross-links to other documentation
-intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
+intersphinx_mapping = {"python": ("https://docs.python.org/3.9", None)}
