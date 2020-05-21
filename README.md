@@ -1,6 +1,6 @@
 # `backports.zoneinfo`: Backport of the standard library module `zoneinfo`
 
-This package was originally the reference implementation for [PEP 615](https://www.python.org/dev/peps/pep-0615/), which proposes support for the IANA time zone database in the standard library, and now serves as a backport to Python 3.8.
+This package was originally the reference implementation for [PEP 615](https://www.python.org/dev/peps/pep-0615/), which proposes support for the IANA time zone database in the standard library, and now serves as a backport to Python 3.7+.
 
 This exposes the `backports.zoneinfo` module, which is a backport of the [`zoneinfo`](https://docs.python.org/3.9/library/zoneinfo.html#module-zoneinfo) module. The backport's documentation can be found [on readthedocs](https://zoneinfo.readthedocs.io/en/latest/).
 
@@ -30,7 +30,7 @@ Support for `backports.zoneinfo` in Python 3.9+ is currently minimal, since it i
 
 ## Use
 
-The `backports.zoneinfo` module should be a drop-in replacement for the Python 3.9 standard library module `zoneinfo`. If you do not support anything earlier than Python 3.9, **you do not need this library**; if you are supporting Python 3.8+, you may want to use this idiom to "fall back" to ``backports.zoneinfo``:
+The `backports.zoneinfo` module should be a drop-in replacement for the Python 3.9 standard library module `zoneinfo`. If you do not support anything earlier than Python 3.9, **you do not need this library**; if you are supporting Python 3.7+, you may want to use this idiom to "fall back" to ``backports.zoneinfo``:
 
 ```python
 try:

@@ -3,7 +3,7 @@
 
 This was originally the reference implementation for :pep:`615`, which adds
 support for the IANA time zone database to the Python standard library, but now
-serves as a backport of the module to Python 3.8.
+serves as a backport of the module to Python 3.7+.
 
 The upstream documentation can be found at :mod:`zoneinfo`. A mirror of the
 documentation pinned to the version supported in the backport can be found at
