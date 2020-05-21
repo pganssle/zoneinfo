@@ -1,23 +1,24 @@
-:mod:`zoneinfo` --- IANA time zone support
-==========================================
+:mod:`backports.zoneinfo` --- IANA time zone support
+====================================================
 
-.. module:: zoneinfo
+.. module:: backports.zoneinfo
     :synopsis: IANA time zone support
-
-.. versionadded:: 3.9
 
 .. moduleauthor:: Paul Ganssle <paul@ganssle.io>
 .. sectionauthor:: Paul Ganssle <paul@ganssle.io>
 
 --------------
 
-The :mod:`zoneinfo` module provides a concrete time zone implementation to
-support the IANA time zone database as originally specified in :pep:`615`. By
-default, :mod:`zoneinfo` uses the system's time zone data if available; if no
-system time zone data is available, the library will fall back to using the
-first-party `tzdata`_ package available on PyPI.
+The :mod:`~backports.zoneinfo` module provides a concrete time zone
+implementation to support the IANA time zone database as originally specified
+in :pep:`615`. By default, :mod:`~backports.zoneinfo` uses the system's time
+zone data if available; if no system time zone data is available, the library
+will fall back to using the first-party `tzdata`_ package available on PyPI.
 
 .. seealso::
+
+    Module: :mod:`zoneinfo`
+        The standard library module ``zoneinfo``, of which this is a backport.
 
     Module: :mod:`datetime`
         Provides the :class:`~datetime.time` and :class:`~datetime.datetime`
@@ -36,7 +37,7 @@ abstract base class, and is intended to be attached to ``tzinfo``, either via
 the constructor, the :meth:`datetime.replace <datetime.datetime.replace>`
 method or :meth:`datetime.astimezone <datetime.datetime.astimezone>`::
 
-    >>> from zoneinfo import ZoneInfo
+    >>> from backports.zoneinfo import ZoneInfo
     >>> from datetime import datetime, timedelta
 
     >>> dt = datetime(2020, 10, 31, 12, tzinfo=ZoneInfo("America/Los_Angeles"))

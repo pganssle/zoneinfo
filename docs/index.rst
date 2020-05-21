@@ -1,10 +1,15 @@
-``zoneinfo``: IANA Time Zones for the Standard Library
-======================================================
+``backports.zoneinfo``: A backport of the ``zoneinfo`` module
+=============================================================
 
+This was originally the reference implementation for :pep:`615`, which adds
+support for the IANA time zone database to the Python standard library, but now
+serves as a backport of the module to Python 3.8.
 
-This is the reference implementation for :pep:`615`, which adds support for the IANA time zone database to the Python standard library.
+The upstream documentation can be found at :mod:`zoneinfo`. A mirror of the
+documentation pinned to the version supported in the backport can be found at
+:mod:`backports.zoneinfo`.
 
-See :mod:`zoneinfo` for the module's full documentation.
+This is the documentation for version |version|.
 
 Documentation
 =============
