@@ -9,6 +9,8 @@ The upstream documentation can be found at :mod:`zoneinfo`. A mirror of the
 documentation pinned to the version supported in the backport can be found at
 :mod:`backports.zoneinfo`.
 
+This is the documentation for version |version|.
+
 Documentation
 =============
 Contents:
