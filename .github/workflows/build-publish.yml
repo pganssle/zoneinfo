@@ -57,7 +57,7 @@ jobs:
           docker pull $DOCKER_IMAGE
       - name: Build wheels
         env:
-          PYTHON_TAGS: "cp37-cp37m cp38-cp38"
+          PYTHON_TAGS: "cp36-cp36m cp37-cp37m cp38-cp38"
           PRE_CMD:  ${{ matrix.platform == 'manylinux1_i686' && 'linux32' || '' }}
         run: |
           docker run --rm \
@@ -76,7 +76,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python_version: [ '3.7', '3.8' ]
+        python_version: [ '3.6', '3.7', '3.8' ]
         arch: [ 'x86', 'x64' ]
         os:
           - 'windows-latest'
