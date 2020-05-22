@@ -2601,14 +2601,18 @@ module_free()
 
     xdecref_ttinfo(&NO_TTINFO);
 
-    Py_XDECREF(TIMEDELTA_CACHE);
-    if (!Py_REFCNT(TIMEDELTA_CACHE)) {
-        TIMEDELTA_CACHE = NULL;
+    if (TIMEDELTA_CACHE != NULL && Py_REFCNT(TIMEDELTA_CACHE) > 1) {
+        Py_DECREF(TIMEDELTA_CACHE);
+    }
+    else {
+        Py_CLEAR(TIMEDELTA_CACHE);
     }
 
-    Py_XDECREF(ZONEINFO_WEAK_CACHE);
-    if (!Py_REFCNT(ZONEINFO_WEAK_CACHE)) {
-        ZONEINFO_WEAK_CACHE = NULL;
+    if (ZONEINFO_WEAK_CACHE != NULL && Py_REFCNT(ZONEINFO_WEAK_CACHE) > 1) {
+        Py_DECREF(ZONEINFO_WEAK_CACHE);
+    }
+    else {
+        Py_CLEAR(ZONEINFO_WEAK_CACHE);
     }
 
     strong_cache_free(ZONEINFO_STRONG_CACHE);
