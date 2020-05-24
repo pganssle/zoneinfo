@@ -43,8 +43,8 @@ typedef struct {
     PyObject *key;
     PyObject *file_repr;
     PyObject *weakreflist;
-    unsigned int num_transitions;
-    unsigned int num_ttinfos;
+    size_t num_transitions;
+    size_t num_ttinfos;
     int64_t *trans_list_utc;
     int64_t *trans_list_wall[2];
     _ttinfo **trans_ttinfos;  // References to the ttinfo for each transition
@@ -909,12 +909,12 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
 
     // Load the relevant sizes
     Py_ssize_t num_transitions = PyTuple_Size(trans_utc);
-    if (num_transitions == -1) {
+    if (num_transitions < 0) {
         goto error;
     }
 
     Py_ssize_t num_ttinfos = PyTuple_Size(utcoff_list);
-    if (num_ttinfos == -1) {
+    if (num_ttinfos < 0) {
         goto error;
     }
 
@@ -926,7 +926,7 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
         PyMem_Malloc(self->num_transitions * sizeof(int64_t));
     trans_idx = PyMem_Malloc(self->num_transitions * sizeof(Py_ssize_t));
 
-    for (Py_ssize_t i = 0; i < self->num_transitions; ++i) {
+    for (size_t i = 0; i < self->num_transitions; ++i) {
         PyObject *num = PyTuple_GetItem(trans_utc, i);
         if (num == NULL) {
             goto error;
@@ -964,7 +964,7 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
     if (utcoff == NULL || isdst == NULL) {
         goto error;
     }
-    for (Py_ssize_t i = 0; i < self->num_ttinfos; ++i) {
+    for (size_t i = 0; i < self->num_ttinfos; ++i) {
         PyObject *num = PyTuple_GetItem(utcoff_list, i);
         if (num == NULL) {
             goto error;
