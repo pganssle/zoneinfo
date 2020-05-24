@@ -1785,7 +1785,13 @@ parse_transition_rule(const char *const p, TransitionRuleType **out)
             }
             ptr++;
 
+            // The Windows compiler complains about a possible reduction in
+            // precision when casting from Py_ssize_t to uint8_t, but the check
+            // above ensures that the result is within the allowed range.
+#pragma warning(push)
+#pragma warning(disable : 4244)
             *(values[i]) = tmp;
+#pragma warning(pop)
         }
 
         if (*ptr == '/') {
