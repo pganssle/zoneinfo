@@ -15,12 +15,7 @@ import unittest
 from datetime import date, datetime, time, timedelta, timezone
 
 from . import _support as test_support
-from ._support import (
-    OS_ENV_LOCK,
-    TZPATH_LOCK,
-    TZPATH_TEST_LOCK,
-    ZoneInfoTestBase,
-)
+from ._support import OS_ENV_LOCK, TZPATH_TEST_LOCK, ZoneInfoTestBase
 
 try:
     from functools import cached_property

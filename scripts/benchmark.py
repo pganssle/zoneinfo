@@ -1,8 +1,7 @@
-import functools
 import statistics
 import sys
 import timeit
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import click
 import pint
