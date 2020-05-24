@@ -1780,7 +1780,7 @@ parse_transition_rule(const char *const p, TransitionRuleType **out)
             ptr++;
 
             tmp = parse_uint(ptr);
-            if (tmp < 0) {
+            if (tmp < 0 || tmp >= 256) {
                 return -1;
             }
             ptr++;
