@@ -1,6 +1,8 @@
 import os
 import sys
 
+PY36 = sys.version_info < (3, 7)
+
 
 def reset_tzpath(to=None):
     global TZPATH
@@ -32,6 +34,10 @@ def reset_tzpath(to=None):
             base_tzpath = ()
 
     TZPATH = tuple(base_tzpath)
+
+    if TZPATH_CALLBACKS:
+        for callback in TZPATH_CALLBACKS:
+            callback(TZPATH)
 
 
 def _parse_python_tzpath(env_var):
@@ -132,7 +138,10 @@ def available_timezones():
         determine if a given file on the time zone search path is to open it
         and check for the "magic string" at the beginning.
     """
-    from importlib import resources
+    try:
+        from importlib import resources
+    except ImportError:
+        import importlib_resources as resources
 
     valid_zones = set()
 
@@ -193,4 +202,5 @@ class InvalidTZPathWarning(RuntimeWarning):
 
 
 TZPATH = ()
+TZPATH_CALLBACKS = []
 reset_tzpath()

@@ -3,7 +3,6 @@ import datetime
 import os
 import pickle
 import unittest
-from importlib import resources
 
 import hypothesis
 import pytest
@@ -12,6 +11,12 @@ from backports import zoneinfo
 
 from . import _support as test_support
 from ._support import ZoneInfoTestBase
+
+try:
+    from importlib import resources
+except ImportError:
+    import importlib_resources as resources
+
 
 py_zoneinfo, c_zoneinfo = test_support.get_modules()
 
