@@ -103,6 +103,8 @@ jobs:
       - name: Create tox environment
         run: tox -e build --notest
       - name: Build wheel
+        env:
+          CL: ${{ matrix.os == 'windows-latest' && '/WX /wd4068' || '' }}
         run: |
           tox -e build -- -b
       - uses: actions/upload-artifact@v2
