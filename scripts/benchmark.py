@@ -184,7 +184,8 @@ def cli(benchmark, zone, compare, c_ext, py):
     # Determine which benchmarks to run
     if not benchmark:
         raise InvalidInput("No benchmarks specified")
-    elif len(benchmark) == 1 and benchmark[0] == "all":
+
+    if len(benchmark) == 1 and benchmark[0] == "all":
         benchmarks = sorted(BENCHMARKS.keys())
     else:
         if "all" in benchmark:
