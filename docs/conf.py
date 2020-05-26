@@ -36,7 +36,10 @@ version = get_version()
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ["sphinx.ext.intersphinx"]
+extensions = [
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.extlinks",
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -61,3 +64,15 @@ html_static_path = []
 
 # For cross-links to other documentation
 intersphinx_mapping = {"python": ("https://docs.python.org/3.9", None)}
+
+# This config value must be a dictionary of external sites, mapping unique
+# short alias names to a base URL and a prefix.
+# See http://sphinx-doc.org/ext/extlinks.html
+_repo = "https://github.com/pganssle/zoneinfo/"
+extlinks = {
+    "gh": (_repo + "issues/%s", "GH-"),
+    "gh-pr": (_repo + "pull/%s", "GH-"),
+    "pypi": ("https://pypi.org/project/%s", ""),
+    "bpo": ("https://bugs.python.org/issue%s", "bpo-"),
+    "cpython-pr": ("https://github.com/python/cpython/pull/%s", "CPython PR #"),
+}
