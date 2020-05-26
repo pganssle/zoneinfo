@@ -205,7 +205,7 @@ def run_benchmark(desc, func, k=5, N=None):
 
     # Run for 0.2 seconds
     if N is None:
-        N, time_taken = timer.autorange()
+        N, time_taken = timer.autorange()  # pylint: disable=unused-variable
 
     results = timer.repeat(repeat=k, number=N)
     results = [r / N for r in results]
