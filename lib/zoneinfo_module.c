@@ -1581,14 +1581,15 @@ error:
     return -1;
 }
 
-static Py_ssize_t
-parse_uint(const char *const p)
+static int
+parse_uint(const char *const p, uint8_t *value)
 {
     if (!isdigit(*p)) {
         return -1;
     }
 
-    return (*p) - '0';
+    *value = (*p) - '0';
+    return 0;
 }
 
 /* Parse the STD and DST abbreviations from a TZ string. */
@@ -1755,20 +1756,18 @@ parse_transition_rule(const char *const p, TransitionRuleType **out)
     if (*ptr == 'M') {
         uint8_t month, week, day;
         ptr++;
-        Py_ssize_t tmp = parse_uint(ptr);
-        if (tmp < 0) {
+        if (parse_uint(ptr, &month)) {
             return -1;
         }
-        month = (uint8_t)tmp;
         ptr++;
         if (*ptr != '.') {
-            tmp = parse_uint(ptr);
-            if (tmp < 0) {
+            uint8_t tmp;
+            if (parse_uint(ptr, &tmp)) {
                 return -1;
             }
 
             month *= 10;
-            month += (uint8_t)tmp;
+            month += tmp;
             ptr++;
         }
 
@@ -1779,19 +1778,10 @@ parse_transition_rule(const char *const p, TransitionRuleType **out)
             }
             ptr++;
 
-            tmp = parse_uint(ptr);
-            if (tmp < 0 || tmp >= 256) {
+            if (parse_uint(ptr, values[i])) {
                 return -1;
             }
             ptr++;
-
-            // The Windows compiler complains about a possible reduction in
-            // precision when casting from Py_ssize_t to uint8_t, but the check
-            // above ensures that the result is within the allowed range.
-#pragma warning(push)
-#pragma warning(disable : 4244)
-            *(values[i]) = tmp;
-#pragma warning(pop)
         }
 
         if (*ptr == '/') {
