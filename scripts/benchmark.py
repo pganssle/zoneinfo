@@ -1,8 +1,7 @@
-import functools
 import statistics
 import sys
 import timeit
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import click
 import pint
@@ -185,7 +184,8 @@ def cli(benchmark, zone, compare, c_ext, py):
     # Determine which benchmarks to run
     if not benchmark:
         raise InvalidInput("No benchmarks specified")
-    elif len(benchmark) == 1 and benchmark[0] == "all":
+
+    if len(benchmark) == 1 and benchmark[0] == "all":
         benchmarks = sorted(BENCHMARKS.keys())
     else:
         if "all" in benchmark:
@@ -206,7 +206,7 @@ def run_benchmark(desc, func, k=5, N=None):
 
     # Run for 0.2 seconds
     if N is None:
-        N, time_taken = timer.autorange()
+        N, time_taken = timer.autorange()  # pylint: disable=unused-variable
 
     results = timer.repeat(repeat=k, number=N)
     results = [r / N for r in results]

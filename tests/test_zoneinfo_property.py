@@ -256,7 +256,8 @@ class PythonCConsistencyTest(unittest.TestCase):
 
         if (py_overflow_exc is not None) != (c_overflow_exc is not None):
             raise py_overflow_exc or c_overflow_exc  # pragma: nocover
-        elif py_overflow_exc is not None:
+
+        if py_overflow_exc is not None:
             return  # Consistently raises the same exception
 
         # PEP 495 says that an inter-zone comparison between ambiguous
@@ -296,7 +297,8 @@ class PythonCConsistencyTest(unittest.TestCase):
 
         if (py_overflow_exc is not None) != (c_overflow_exc is not None):
             raise py_overflow_exc or c_overflow_exc  # pragma: nocover
-        elif py_overflow_exc is not None:
+
+        if py_overflow_exc is not None:
             return  # Consistently raises the same exception
 
         self.assertEqual(py_utc, c_utc)

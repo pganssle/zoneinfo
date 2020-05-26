@@ -32,3 +32,17 @@ known_third_party=[
 multi_line_output=3
 not_skip="__init__.py"
 use_parentheses=true
+
+[tool.pylint.'MESSAGES CONTROL']
+disable="all"
+enable="""
+    unused-import,
+    unused-variable,
+    unpacking-non-sequence,
+    invalid-all-object,
+    used-before-assignment,
+    no-else-raise,
+    bad-format-character,
+    bad-format-string,
+    bare-except,
+"""
