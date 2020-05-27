@@ -43,8 +43,8 @@ typedef struct {
     PyObject *key;
     PyObject *file_repr;
     PyObject *weakreflist;
-    unsigned int num_transitions;
-    unsigned int num_ttinfos;
+    size_t num_transitions;
+    size_t num_ttinfos;
     int64_t *trans_list_utc;
     int64_t *trans_list_wall[2];
     _ttinfo **trans_ttinfos;  // References to the ttinfo for each transition
@@ -124,14 +124,14 @@ ts_to_local(size_t *trans_idx, int64_t *trans_utc, long *utcoff,
 static int
 parse_tz_str(PyObject *tz_str_obj, _tzrule *out);
 
-static ssize_t
+static Py_ssize_t
 parse_abbr(const char *const p, PyObject **abbr);
-static ssize_t
+static Py_ssize_t
 parse_tz_delta(const char *const p, long *total_seconds);
-static ssize_t
+static Py_ssize_t
 parse_transition_time(const char *const p, int8_t *hour, int8_t *minute,
                       int8_t *second);
-static ssize_t
+static Py_ssize_t
 parse_transition_rule(const char *const p, TransitionRuleType **out);
 
 static _ttinfo *
@@ -909,12 +909,12 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
 
     // Load the relevant sizes
     Py_ssize_t num_transitions = PyTuple_Size(trans_utc);
-    if (num_transitions == -1) {
+    if (num_transitions < 0) {
         goto error;
     }
 
     Py_ssize_t num_ttinfos = PyTuple_Size(utcoff_list);
-    if (num_ttinfos == -1) {
+    if (num_ttinfos < 0) {
         goto error;
     }
 
@@ -926,7 +926,7 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
         PyMem_Malloc(self->num_transitions * sizeof(int64_t));
     trans_idx = PyMem_Malloc(self->num_transitions * sizeof(Py_ssize_t));
 
-    for (Py_ssize_t i = 0; i < self->num_transitions; ++i) {
+    for (size_t i = 0; i < self->num_transitions; ++i) {
         PyObject *num = PyTuple_GetItem(trans_utc, i);
         if (num == NULL) {
             goto error;
@@ -964,7 +964,7 @@ load_data(PyZoneInfo_ZoneInfo *self, PyObject *file_obj)
     if (utcoff == NULL || isdst == NULL) {
         goto error;
     }
-    for (Py_ssize_t i = 0; i < self->num_ttinfos; ++i) {
+    for (size_t i = 0; i < self->num_ttinfos; ++i) {
         PyObject *num = PyTuple_GetItem(utcoff_list, i);
         if (num == NULL) {
             goto error;
@@ -1475,7 +1475,9 @@ parse_tz_str(PyObject *tz_str_obj, _tzrule *out)
     PyObject *dst_abbr = NULL;
     TransitionRuleType *start = NULL;
     TransitionRuleType *end = NULL;
-    long std_offset, dst_offset;
+    // Initialize offsets to invalid value (> 24 hours)
+    long std_offset = 1 << 20;
+    long dst_offset = 1 << 20;
 
     char *tz_str = PyBytes_AsString(tz_str_obj);
     if (tz_str == NULL) {
@@ -1484,7 +1486,7 @@ parse_tz_str(PyObject *tz_str_obj, _tzrule *out)
     char *p = tz_str;
 
     // Read the `std` abbreviation, which must be at least 3 characters long.
-    ssize_t num_chars = parse_abbr(p, &std_abbr);
+    Py_ssize_t num_chars = parse_abbr(p, &std_abbr);
     if (num_chars < 1) {
         PyErr_Format(PyExc_ValueError, "Invalid STD format in %R", tz_str_obj);
         goto error;
@@ -1581,18 +1583,19 @@ error:
     return -1;
 }
 
-static ssize_t
-parse_uint(const char *const p)
+static int
+parse_uint(const char *const p, uint8_t *value)
 {
     if (!isdigit(*p)) {
         return -1;
     }
 
-    return (*p) - '0';
+    *value = (*p) - '0';
+    return 0;
 }
 
 /* Parse the STD and DST abbreviations from a TZ string. */
-static ssize_t
+static Py_ssize_t
 parse_abbr(const char *const p, PyObject **abbr)
 {
     const char *ptr = p;
@@ -1645,7 +1648,7 @@ parse_abbr(const char *const p, PyObject **abbr)
 }
 
 /* Parse a UTC offset from a TZ str. */
-static ssize_t
+static Py_ssize_t
 parse_tz_delta(const char *const p, long *total_seconds)
 {
     // From the POSIX spec:
@@ -1728,7 +1731,7 @@ complete:
 }
 
 /* Parse the date portion of a transition rule. */
-static ssize_t
+static Py_ssize_t
 parse_transition_rule(const char *const p, TransitionRuleType **out)
 {
     // The full transition rule indicates when to change back and forth between
@@ -1755,20 +1758,18 @@ parse_transition_rule(const char *const p, TransitionRuleType **out)
     if (*ptr == 'M') {
         uint8_t month, week, day;
         ptr++;
-        ssize_t tmp = parse_uint(ptr);
-        if (tmp < 0) {
+        if (parse_uint(ptr, &month)) {
             return -1;
         }
-        month = (uint8_t)tmp;
         ptr++;
         if (*ptr != '.') {
-            tmp = parse_uint(ptr);
-            if (tmp < 0) {
+            uint8_t tmp;
+            if (parse_uint(ptr, &tmp)) {
                 return -1;
             }
 
             month *= 10;
-            month += (uint8_t)tmp;
+            month += tmp;
             ptr++;
         }
 
@@ -1779,18 +1780,15 @@ parse_transition_rule(const char *const p, TransitionRuleType **out)
             }
             ptr++;
 
-            tmp = parse_uint(ptr);
-            if (tmp < 0) {
+            if (parse_uint(ptr, values[i])) {
                 return -1;
             }
             ptr++;
-
-            *(values[i]) = tmp;
         }
 
         if (*ptr == '/') {
             ptr++;
-            ssize_t num_chars =
+            Py_ssize_t num_chars =
                 parse_transition_time(ptr, &hour, &minute, &second);
             if (num_chars < 0) {
                 return -1;
@@ -1832,7 +1830,7 @@ parse_transition_rule(const char *const p, TransitionRuleType **out)
 
         if (*ptr == '/') {
             ptr++;
-            ssize_t num_chars =
+            Py_ssize_t num_chars =
                 parse_transition_time(ptr, &hour, &minute, &second);
             if (num_chars < 0) {
                 return -1;
@@ -1856,7 +1854,7 @@ parse_transition_rule(const char *const p, TransitionRuleType **out)
 }
 
 /* Parse the time portion of a transition rule (e.g. following an /) */
-static ssize_t
+static Py_ssize_t
 parse_transition_time(const char *const p, int8_t *hour, int8_t *minute,
                       int8_t *second)
 {
@@ -1925,7 +1923,7 @@ build_tzrule(PyObject *std_abbr, PyObject *dst_abbr, long std_offset,
              long dst_offset, TransitionRuleType *start,
              TransitionRuleType *end, _tzrule *out)
 {
-    _tzrule rv = {0};
+    _tzrule rv = {{0}};
 
     rv.start = start;
     rv.end = end;
