@@ -167,6 +167,9 @@ ymd_to_ord(int y, int m, int d);
 static int
 is_leap_year(int year);
 
+static int
+get_fold(PyObject *dt, unsigned char *fold);
+
 static size_t
 _bisect(const int64_t value, const int64_t *arr, size_t size);
 
@@ -488,7 +491,7 @@ zoneinfo_tzname(PyObject *self, PyObject *dt)
     return tti->tzname;
 }
 
-#define HASTZINFO(p) (((_PyDateTime_BaseTZInfo *)(p))->hastzinfo)
+#define HASTZINFO(p) (((PyDateTime_DateTime *)(p))->hastzinfo)
 #define GET_DT_TZINFO(p) \
     (HASTZINFO(p) ? ((PyDateTime_DateTime *)(p))->tzinfo : Py_None)
 
@@ -573,11 +576,13 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
     }
 
     if (fold) {
-        if (PyDateTime_CheckExact(tmp)) {
+#ifdef PyDateTime_DATE_GET_FOLD
+        if (can_set_direct && PyDateTime_CheckExact(tmp)) {
             ((PyDateTime_DateTime *)tmp)->fold = 1;
             dt = tmp;
         }
         else {
+#endif
             PyObject *replace = PyObject_GetAttrString(tmp, "replace");
             PyObject *args = PyTuple_New(0);
             PyObject *kwargs = PyDict_New();
@@ -586,7 +591,7 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
 #ifdef ATLEAST_37
             one = PyLong_FromLong(1);
 #else
-            one = _PyLong_One;
+        one = _PyLong_One;
 #endif
 
             Py_DECREF(tmp);
@@ -613,7 +618,9 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
             if (dt == NULL) {
                 return NULL;
             }
+#ifdef PyDateTime_DATE_GET_FOLD
         }
+#endif
     }
     else {
         dt = tmp;
@@ -2156,7 +2163,10 @@ find_ttinfo(PyZoneInfo_ZoneInfo *self, PyObject *dt)
         return NULL;
     }
 
-    unsigned char fold = PyDateTime_DATE_GET_FOLD(dt);
+    unsigned char fold;
+    if (get_fold(dt, &fold)) {
+        return NULL;
+    }
     assert(fold < 2);
     int64_t *local_transitions = self->trans_list_wall[fold];
     size_t num_trans = self->num_transitions;
@@ -2194,6 +2204,32 @@ ymd_to_ord(int y, int m, int d)
     }
 
     return days_before_year + yearday + d;
+}
+
+static int
+get_fold(PyObject *dt, unsigned char *fold)
+{
+#ifndef PyDateTime_DATE_GET_FOLD
+    PyObject *pyfold = PyObject_GetAttrString(dt, "fold");
+    if (pyfold == NULL) {
+        return -1;
+    }
+
+    long lfold = PyLong_AsLong(pyfold);
+    if (PyErr_Occurred()) {
+        return -1;
+    }
+
+    if (lfold < 0 || lfold > 1) {
+        PyErr_SetString(PyExc_ValueError, "Fold may only be exactly 0 or 1.");
+        return -1;
+    }
+
+    *fold = (unsigned char)lfold;
+#else
+    *fold = PyDateTime_DATE_GET_FOLD(dt);
+#endif
+    return 0;
 }
 
 /* Calculate the number of seconds since 1970-01-01 in local time.

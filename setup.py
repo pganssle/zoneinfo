@@ -4,7 +4,7 @@ import platform
 import setuptools
 from setuptools import Extension
 
-if platform.python_implementation() != "PyPy":
+if True or platform.python_implementation() != "PyPy":
     c_extension = Extension(
         "backports.zoneinfo._czoneinfo", sources=["lib/zoneinfo_module.c"],
     )
