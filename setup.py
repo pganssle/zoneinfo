@@ -1,13 +1,18 @@
 import os
+import platform
 
 import setuptools
 from setuptools import Extension
 
-c_extension = Extension(
-    "backports.zoneinfo._czoneinfo", sources=["lib/zoneinfo_module.c"],
-)
+if platform.python_implementation() != "PyPy":
+    c_extension = Extension(
+        "backports.zoneinfo._czoneinfo", sources=["lib/zoneinfo_module.c"],
+    )
 
-setuptools.setup(ext_modules=[c_extension])
+    setuptools.setup(ext_modules=[c_extension])
+else:
+    setuptools.setup()
+
 
 if "GCNO_TARGET_DIR" in os.environ:
     import glob

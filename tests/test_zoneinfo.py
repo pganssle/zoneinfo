@@ -15,7 +15,7 @@ import unittest
 from datetime import date, datetime, time, timedelta, timezone
 
 from . import _support as test_support
-from ._support import OS_ENV_LOCK, TZPATH_TEST_LOCK, ZoneInfoTestBase
+from ._support import IS_PYPY, OS_ENV_LOCK, TZPATH_TEST_LOCK, ZoneInfoTestBase
 
 try:
     from functools import cached_property
@@ -35,6 +35,7 @@ try:
     HAS_TZDATA_PKG = True
 except importlib_metadata.PackageNotFoundError:
     HAS_TZDATA_PKG = False
+
 
 ZONEINFO_DATA = None
 ZONEINFO_DATA_V1 = None
@@ -1771,6 +1772,7 @@ class CTestModule(TestModule):
     module = c_zoneinfo
 
 
+@unittest.skipIf(IS_PYPY, "C Extension not built on PyPy")
 class ExtensionBuiltTest(unittest.TestCase):
     """Smoke test to ensure that the C and Python extensions are both tested.
 
