@@ -36,6 +36,7 @@ try:
 except importlib_metadata.PackageNotFoundError:
     HAS_TZDATA_PKG = False
 
+
 ZONEINFO_DATA = None
 ZONEINFO_DATA_V1 = None
 TEMP_DIR = None
