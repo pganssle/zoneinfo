@@ -26,7 +26,7 @@ jobs:
         python -m pip install --upgrade pip tox
     - name: Run tests
       run: |
-        tox
+        python -m tox
     - name: Report coverage
       run: |
         tox -e coverage-report,codecov
