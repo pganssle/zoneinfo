@@ -1,3 +1,11 @@
+Version 0.2.0 (2020-05-29)
+==========================
+
+- Added support for PyPy 3.6 (:gh-pr:`74`); when installed on PyPy, the library
+  will not use the C extension, since benchmarks indicate that the pure Python
+  implementation is faster.
+
+
 Version 0.1.0 (2020-05-26)
 ==========================
 
