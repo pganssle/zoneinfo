@@ -1,5 +1,6 @@
 import contextlib
 import functools
+import platform
 import sys
 import threading
 import unittest
@@ -8,6 +9,8 @@ from test.support import import_fresh_module
 OS_ENV_LOCK = threading.Lock()
 TZPATH_LOCK = threading.Lock()
 TZPATH_TEST_LOCK = threading.Lock()
+
+IS_PYPY = platform.python_implementation() == "PyPy"
 
 
 def call_once(f):
@@ -33,6 +36,13 @@ def get_modules():
     one time — in other words, when using this function you will only ever
     get one copy of each module rather than a fresh import each time.
     """
+    # PyPy doesn't have a C extension, so for the moment we'll just give it
+    # two copies of the normal module
+    if IS_PYPY:
+        from backports import zoneinfo
+
+        return zoneinfo, zoneinfo
+
     # The standard import_fresh_module approach seems to be somewhat buggy
     # when it comes to C imports, so in the short term, we will do a little
     # module surgery to test this.
@@ -45,7 +55,6 @@ def get_modules():
 
     py_module.ZoneInfo = py_zoneinfo.ZoneInfo
     c_module.ZoneInfo = c_zoneinfo.ZoneInfo
-
     return py_module, c_module
 
 
