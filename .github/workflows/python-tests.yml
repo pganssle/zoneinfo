@@ -78,7 +78,6 @@ jobs:
             CFLAGS+=" -Wno-unused-result"
             CFLAGS+=" -Wno-unused-parameter"
             CFLAGS+=" -Wno-missing-field-initializers"
-            CFLAGS+=" -Wno-unknown-pragmas"
             export CFLAGS="${CFLAGS}"
             TOXENV="build,build-check"
           fi
