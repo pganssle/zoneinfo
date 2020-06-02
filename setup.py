@@ -1,12 +1,26 @@
 import os
 import platform
+import sys
 
 import setuptools
 from setuptools import Extension
 
 if platform.python_implementation() != "PyPy":
+    # We need to pass the -std=c99 to gcc and/or clang, but we shouldn't pass
+    # it to MSVC. There doesn't seem to be a simple way of setting
+    # compiler-specific compile arguments, but for practical purposes
+    # conditionally adding this argument on non-Windows platforms should be
+    # enough. If an edge case is found that prevents compilation on some
+    # systems, the end user should be able to set CFLAGS="-std=c99".
+    if not sys.platform.startswith("win"):
+        extra_compile_args = ["-std=c99"]
+    else:
+        extra_compile_args = []
+
     c_extension = Extension(
-        "backports.zoneinfo._czoneinfo", sources=["lib/zoneinfo_module.c"],
+        "backports.zoneinfo._czoneinfo",
+        sources=["lib/zoneinfo_module.c"],
+        extra_compile_args=extra_compile_args,
     )
 
     setuptools.setup(ext_modules=[c_extension])
