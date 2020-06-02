@@ -14,6 +14,17 @@
 #endif
 #endif
 
+#ifdef __GNUC__
+#define DO_PRAGMA(x) _Pragma(#x)
+#define COMPILER_WARNING_DISABLE_GCC_PUSH(err) \
+    DO_PRAGMA(GCC diagnostic push)             \
+    DO_PRAGMA(GCC diagnostic ignored err)
+#define COMPILER_WARNING_DISABLE_GCC_POP _Pragma("GCC diagnostic pop")
+#else
+#define COMPILER_WARNING_DISABLE_GCC_PUSH(err)
+#define COMPILER_WARNING_DISABLE_GCC_POP
+#endif
+
 // Imports
 static PyObject *io_open = NULL;
 static PyObject *_tzpath_find_tzfile = NULL;
@@ -1239,10 +1250,10 @@ calendarrule_new(uint8_t month, uint8_t week, uint8_t day, int8_t hour,
     // it may create a bug. Considering that the compiler should be able to
     // optimize out the first comparison if day is an unsigned integer anyway,
     // we will leave this comparison in place and disable the compiler warning.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wtype-limits"
+
+    COMPILER_WARNING_DISABLE_GCC_PUSH("-Wtype-limits")
     if (day < 0 || day > 6) {
-#pragma GCC diagnostic pop
+        COMPILER_WARNING_DISABLE_GCC_POP
         PyErr_Format(PyExc_ValueError, "Day must be in [0, 6]");
         return -1;
     }
