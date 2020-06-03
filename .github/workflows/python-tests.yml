@@ -71,14 +71,13 @@ jobs:
       - name: Run action
         run: |
           if [[ $TOXENV == "build" ]]; then
-            CFLAGS="-std=c99"
+            CFLAGS=""
             CFLAGS+=" -Wall"
             CFLAGS+=" -Werror"
             CFLAGS+=" -Wextra"
             CFLAGS+=" -Wno-unused-result"
             CFLAGS+=" -Wno-unused-parameter"
             CFLAGS+=" -Wno-missing-field-initializers"
-            CFLAGS+=" -Wno-unknown-pragmas"
             export CFLAGS="${CFLAGS}"
             TOXENV="build,build-check"
           fi
