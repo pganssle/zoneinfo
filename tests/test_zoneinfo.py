@@ -469,7 +469,7 @@ class CZoneInfoDatetimeSubclassTest(DatetimeSubclassMixin, CZoneInfoTest):
     pass
 
 
-class ZoneInfoTestSubclass(ZoneInfoTest):
+class ZoneInfoSubclassTest(ZoneInfoTest):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
@@ -490,7 +490,7 @@ class ZoneInfoTestSubclass(ZoneInfoTest):
         self.assertIsInstance(sub_obj, self.klass)
 
 
-class CZoneInfoTestSubclass(ZoneInfoTest):
+class CZoneInfoSubclassTest(ZoneInfoSubclassTest):
     module = c_zoneinfo
 
 
