@@ -1,3 +1,11 @@
+Version 0.2.1 (2020-06-18)
+==========================
+
+- Fixed an issue where the C implementation of ``ZoneInfo.__init_subclass__``
+  was not a classmethod, causing errors when attempting to subclass
+  ``ZoneInfo`` (:gh:`82`, :gh-pr:`83`).
+
+
 Version 0.2.0 (2020-05-29)
 ==========================
 
