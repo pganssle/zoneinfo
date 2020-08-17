@@ -50,8 +50,8 @@ def get_modules():
         import_fresh_module("backports.zoneinfo") for _ in range(2)
     )
 
-    from backports.zoneinfo import _zoneinfo as py_zoneinfo
     from backports.zoneinfo import _czoneinfo as c_zoneinfo
+    from backports.zoneinfo import _zoneinfo as py_zoneinfo
 
     py_module.ZoneInfo = py_zoneinfo.ZoneInfo
     c_module.ZoneInfo = c_zoneinfo.ZoneInfo
