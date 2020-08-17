@@ -48,8 +48,6 @@ jobs:
     name: Build a ${{ matrix.platform }} for ${{ matrix.python_tag }}
     steps:
       - uses: actions/checkout@v2
-      - name: Install dependencies
-        run: sudo apt-get install docker
       - name: Install docker image
         run: |
           DOCKER_IMAGE="quay.io/pypa/${{ matrix.platform }}"
