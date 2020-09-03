@@ -32,12 +32,21 @@ def load_tzdata(key):
         #   (e.g. Australia)
         # PermissionError: If the resource_name links to a directory on Windows
         #   (e.g. Pacific)
-        resource_path = importlib_resources.files(package_name).joinpath(key)
+        import pathlib
+
+        try:
+            import importlib.util as importlib_util
+        except ImportError:
+            raise
+
+        tzdata_spec = importlib_util.find_spec("tzdata")
+        tzdata_path = pathlib.Path(tzdata_spec.origin).parent
+        resource_path = tzdata_path / "zoneinfo" / key
 
         if resource_path.is_dir():
             raise ZoneInfoNotFoundError(f"No time zone found with key {key}")
-        else:
-            raise
+
+        raise
 
 
 def load_data(fobj):
