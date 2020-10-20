@@ -1563,15 +1563,27 @@ class TzPathTest(TzPathUserMixin, ZoneInfoTestBase):
         test_cases = [
             [("path/to/somewhere",), ()],
             [
-                ("/usr/share/zoneinfo", "path/to/somewhere",),
+                (
+                    "/usr/share/zoneinfo",
+                    "path/to/somewhere",
+                ),
                 ("/usr/share/zoneinfo",),
             ],
             [("../relative/path",), ()],
             [
-                ("/usr/share/zoneinfo", "../relative/path",),
+                (
+                    "/usr/share/zoneinfo",
+                    "../relative/path",
+                ),
                 ("/usr/share/zoneinfo",),
             ],
-            [("path/to/somewhere", "../relative/path",), ()],
+            [
+                (
+                    "path/to/somewhere",
+                    "../relative/path",
+                ),
+                (),
+            ],
             [
                 (
                     "/usr/share/zoneinfo",
@@ -1603,11 +1615,24 @@ class TzPathTest(TzPathUserMixin, ZoneInfoTestBase):
     def test_reset_tzpath_relative_paths(self):
         bad_values = [
             ("path/to/somewhere",),
-            ("/usr/share/zoneinfo", "path/to/somewhere",),
+            (
+                "/usr/share/zoneinfo",
+                "path/to/somewhere",
+            ),
             ("../relative/path",),
-            ("/usr/share/zoneinfo", "../relative/path",),
-            ("path/to/somewhere", "../relative/path",),
-            ("/usr/share/zoneinfo", "path/to/somewhere", "../relative/path",),
+            (
+                "/usr/share/zoneinfo",
+                "../relative/path",
+            ),
+            (
+                "path/to/somewhere",
+                "../relative/path",
+            ),
+            (
+                "/usr/share/zoneinfo",
+                "path/to/somewhere",
+                "../relative/path",
+            ),
         ]
         for input_paths in bad_values:
             with self.subTest(input_paths=input_paths):
