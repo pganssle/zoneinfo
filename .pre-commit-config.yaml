@@ -6,26 +6,26 @@ repos:
         language_version: python3.8
 
   - repo: https://github.com/pre-commit/mirrors-isort
-    rev: v5.4.2
+    rev: v5.6.4
     hooks:
       - id: isort
         additional_dependencies: [toml]
         language_version: python3.8
 
   - repo: https://github.com/pycqa/pylint
-    rev: pylint-2.5.2
+    rev: pylint-2.6.0
     hooks:
     -   id: pylint
 
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.4.0
+    rev: v3.3.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: debug-statements
 
   - repo: https://github.com/doublify/pre-commit-clang-format
-    rev: f4c4ac5948aff384af2b439bfabb2bdd65d2b3ac
+    rev: 62302476d0da01515660132d76902359bed0f782
     hooks:
     -   id: clang-format
