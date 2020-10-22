@@ -105,7 +105,8 @@ def update_test_data(fname: str = "zoneinfo_data.json") -> None:
 
     # Annotation required: https://github.com/python/mypy/issues/8772
     json_kwargs: typing.Dict[str, typing.Any] = dict(
-        indent=2, sort_keys=True,
+        indent=2,
+        sort_keys=True,
     )
 
     compressed_keys = load_compressed_keys()

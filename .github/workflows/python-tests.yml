@@ -7,9 +7,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ['3.6', '3.7', '3.8', 'pypy3']
+        python-version: ["3.6", "3.7", "3.8", "pypy3"]
         os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         tzdata_extras: ["", "tzdata"]
+        exclude:
+          # Disable PyPy3 on Windows, because GHA currently serves version
+          # 7.3.2, which has a regression that breaks tox on Windows:
+          #
+          # https://foss.heptapod.net/pypy/pypy/-/issues/3331
+          # https://github.com/tox-dev/tox/issues/1704
+          #
+          # This can be removed when a fixed version of PyPy is available on
+          # GHA, or when a workaround is found.
+          - python-version: "pypy3"
+            os: "windows-latest"
     env:
       TOXENV: py
       TEST_EXTRAS_TOX: ${{ matrix.tzdata_extras }}
@@ -35,7 +46,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ['3.6', '3.7', '3.8']
+        python-version: ["3.6", "3.7", "3.8"]
         os: ["ubuntu-latest"]
     env:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
