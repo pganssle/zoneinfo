@@ -51,13 +51,14 @@ jobs:
       - name: Install docker image
         run: |
           DOCKER_IMAGE="quay.io/pypa/${{ matrix.platform }}"
-          echo "::set-env name=DOCKER_IMAGE::$DOCKER_IMAGE"
+          echo "DOCKER_IMAGE=$DOCKER_IMAGE" >> $GITHUB_ENV
           docker pull $DOCKER_IMAGE
       - name: Build wheels
         env:
           PYTHON_TAGS: "cp36-cp36m cp37-cp37m cp38-cp38"
           PRE_CMD:  ${{ matrix.platform == 'manylinux1_i686' && 'linux32' || '' }}
         run: |
+          echo "$name"
           docker run --rm \
             -e PLAT=${{ matrix.platform }} \
             -e PYTHON_TAGS="$PYTHON_TAGS" \
