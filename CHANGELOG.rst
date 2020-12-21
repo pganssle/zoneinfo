@@ -1,3 +1,15 @@
+Version 0.2.2 (2020-12-21)
+==========================
+
+- Fixed an issue in the C implementation where calls to ``fromutc`` on
+  subclasses of ``datetime.datetime`` that result in a datetime with ``fold``
+  set to ``1`` would inappropriately decrease the reference count of the ``1``
+  singleton. (:bpo:`42697`, :gh-pr:`97`).
+- Fixed two reference leaks in the C implementation: ``__init_subclass__`` was
+  leaking a reference to the subclass's weak cache and ``ZoneInfo.clear_cache``
+  would leak a reference to ``ZoneInfo``'s strong cache. (:bpo:`41025`,
+  :bpo:`41568`, :gh-pr:`90`)
+
 Version 0.2.1 (2020-06-18)
 ==========================
 
