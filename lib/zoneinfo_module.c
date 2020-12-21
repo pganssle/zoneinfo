@@ -616,7 +616,7 @@ zoneinfo_fromutc(PyObject *obj_self, PyObject *dt)
             Py_DECREF(args);
             Py_DECREF(kwargs);
             Py_DECREF(replace);
-#ifndef ATLEAST_37
+#ifdef ATLEAST_37
             Py_DECREF(one);
 #endif
 
