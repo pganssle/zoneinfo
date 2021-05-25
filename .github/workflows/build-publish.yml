@@ -109,7 +109,7 @@ jobs:
         env:
           CL: ${{ matrix.os == 'windows-latest' && '/WX' || '' }}
         run: |
-          tox -e build -- -b
+          tox -e build -- -w
       - uses: actions/upload-artifact@v2
         with:
           name: dist
