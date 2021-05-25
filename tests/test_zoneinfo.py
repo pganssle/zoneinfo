@@ -2051,8 +2051,8 @@ class ZoneDumpData:
 
             return [
                 ZoneTransition(datetime(1895, 2, 1), LMT, AEST),
-                ZoneTransition(datetime(1917, 1, 1, 0, 1), AEST, AEDT),
-                ZoneTransition(datetime(1917, 3, 25, 2), AEDT, AEST),
+                ZoneTransition(datetime(1917, 1, 1, 2), AEST, AEDT),
+                ZoneTransition(datetime(1917, 3, 25, 3), AEDT, AEST),
                 ZoneTransition(datetime(2012, 4, 1, 3), AEDT, AEST),
                 ZoneTransition(datetime(2012, 10, 7, 2), AEST, AEDT),
                 ZoneTransition(datetime(2040, 4, 1, 3), AEDT, AEST),
