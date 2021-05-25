@@ -84,6 +84,9 @@ jobs:
         os:
           - 'windows-latest'
           - 'macos-latest'
+        include:
+          - os: 'macos-latest'
+            arch: 'universal2'
         exclude:
           - os: 'macos-latest'
             arch: 'x86'
