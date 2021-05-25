@@ -15,7 +15,7 @@ cd /io/
 for tag in $PYTHON_TAGS; do
     PYBIN="/opt/python/$tag/bin/"
     ${PYBIN}/pip install tox
-    CFLAGS="-std=c99 -O3" ${PYBIN}/tox -e build -- -b
+    CFLAGS="-std=c99 -O3" ${PYBIN}/tox -e build -- -w
 done
 
 mv dist/ raw_wheels
