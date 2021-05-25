@@ -19,7 +19,14 @@ import pathlib
 import textwrap
 import typing
 
-import backports.zoneinfo as zoneinfo
+try:
+    import backports.zoneinfo as zoneinfo
+except ImportError:
+    # Mypy can't handle this try/except definition in multiple blocks,
+    # so we need to tell it to ignore this line for now. See:
+    # https://github.com/python/mypy/issues/1153
+    import zoneinfo  # type: ignore
+
 
 KEYS = [
     "Africa/Abidjan",
