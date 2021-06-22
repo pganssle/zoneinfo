@@ -115,6 +115,23 @@ jobs:
           name: dist
           path: dist
 
+  build_cibw:
+    runs-on: macos-latest
+    name: 'Build wheel: macos-latest 3.8 (universal2)'
+    steps:
+      - uses: actions/checkout@v2
+      - uses: pypa/cibuildwheel@v1.12.0
+        with:
+          output-dir: dist
+        env:
+          CIBW_BUILD: cp38-macosx_universal2
+          CIBW_ARCHS_MACOS: universal2
+          CIBW_TEST_SKIP: '*universal2:arm64'
+      - uses: actions/upload-artifact@v2
+        with:
+          name: dist
+          path: dist
+
   deploy:
     runs-on: 'ubuntu-latest'
     needs: [build_sdist, build_wheel, build_manylinux_wheels]
