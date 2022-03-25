@@ -2015,8 +2015,8 @@ class ZoneDumpData:
             ]
 
         def _America_Santiago():
-            LMT = ZoneOffset("LMT", timedelta(seconds=-16966), ZERO)
-            SMT = ZoneOffset("SMT", timedelta(seconds=-16966), ZERO)
+            LMT = ZoneOffset("LMT", timedelta(seconds=-16965), ZERO)
+            SMT = ZoneOffset("SMT", timedelta(seconds=-16965), ZERO)
             N05 = ZoneOffset("-05", timedelta(seconds=-18000), ZERO)
             N04 = ZoneOffset("-04", timedelta(seconds=-14400), ZERO)
             N03 = ZoneOffset("-03", timedelta(seconds=-10800), ONE_H)
