@@ -18,7 +18,7 @@ on:
 
 jobs:
   build_sdist:
-    runs-on: 'ubuntu-latest'
+    runs-on: 'ubuntu-22.04'
     name: Build sdist
     steps:
       - uses: actions/checkout@v3
@@ -79,13 +79,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python_version: [ '3.6', '3.7', '3.8' ]
+        python_version: [ '3.7', '3.8' ]
         arch: [ 'x86', 'x64' ]
         os:
-          - 'windows-latest'
-          - 'macos-latest'
+          - 'windows-2022'
+          - 'macos-11'
+        include:
+          - { python_version: "3.6",  os: "windows-2019", arch: "x86" }
+          - { python_version: "3.6",  os: "windows-2019", arch: "x64" }
+          - { python_version: "3.6",  os: "macos-10.15", arch: "x64" }
         exclude:
-          - os: 'macos-latest'
+          - os: 'macos-11'
             arch: 'x86'
 
     name: 'Build wheel: ${{ matrix.os }} ${{ matrix.python_version }} (${{ matrix.arch }})'
@@ -93,7 +97,7 @@ jobs:
       - uses: actions/checkout@v3
       - name: Add msbuild to PATH
         uses: microsoft/setup-msbuild@v1.3.1
-        if: matrix.os == 'windows-latest'
+        if: startsWith(matrix.os, 'windows-')
       - name: Setup python
         uses: actions/setup-python@v4
         with:
@@ -107,7 +111,7 @@ jobs:
         run: tox -e build --notest
       - name: Build wheel
         env:
-          CL: ${{ matrix.os == 'windows-latest' && '/WX' || '' }}
+          CL: ${{ startsWith(matrix.os, 'windows-') && '/WX' || '' }}
         run: |
           tox -e build -- -w
       - uses: actions/upload-artifact@v3
@@ -116,7 +120,7 @@ jobs:
           path: dist
 
   deploy:
-    runs-on: 'ubuntu-latest'
+    runs-on: 'ubuntu-22.04'
     needs: [build_sdist, build_wheel, build_manylinux_wheels]
     steps:
     - uses: actions/checkout@v3
