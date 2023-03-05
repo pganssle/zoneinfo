@@ -58,9 +58,9 @@ def test_reset_tzpath() -> None:
     zoneinfo.reset_tzpath()
 
 
-def test_offset() -> Sequence[
-    Tuple[Optional[str], Optional[timedelta], Optional[timedelta]]
-]:
+def test_offset() -> (
+    Sequence[Tuple[Optional[str], Optional[timedelta], Optional[timedelta]]]
+):
     LA: zoneinfo.ZoneInfo = zoneinfo.ZoneInfo("America/Los_Angeles")
     dt: datetime = datetime(2020, 1, 1, tzinfo=LA)
 

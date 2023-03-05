@@ -11,6 +11,7 @@ from . import _common, _tzpath
 EPOCH = datetime(1970, 1, 1)
 EPOCHORDINAL = datetime(1970, 1, 1).toordinal()
 
+
 # It is relatively expensive to construct new timedelta objects, and in most
 # cases we're looking at the same deltas, like integer numbers of hours, etc.
 # To improve speed and memory use, we'll keep a dictionary with references

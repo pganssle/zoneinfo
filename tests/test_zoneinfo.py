@@ -503,7 +503,7 @@ class ZoneInfoV1Test(ZoneInfoTest):
         # We will discard zdump examples outside the range epoch +/- 2**31,
         # because they are not well-supported in Version 1 files.
         epoch = datetime(1970, 1, 1)
-        max_offset_32 = timedelta(seconds=2 ** 31)
+        max_offset_32 = timedelta(seconds=2**31)
         min_dt = epoch - max_offset_32
         max_dt = epoch + max_offset_32
 
@@ -795,8 +795,8 @@ class WeirdZoneTest(ZoneInfoTestBase):
         trans_times_lists = [[], []]
         trans_idx_lists = [[], []]
 
-        v1_range = (-(2 ** 31), 2 ** 31)
-        v2_range = (-(2 ** 63), 2 ** 63)
+        v1_range = (-(2**31), 2**31)
+        v2_range = (-(2**63), 2**63)
         ranges = [v1_range, v2_range]
 
         def zt_as_tuple(zt):
@@ -1327,7 +1327,6 @@ class ZoneInfoCacheTest(TzPathUserMixin, ZoneInfoTestBase):
         self.assertIs(tz0, tz1)
 
     def test_no_cache(self):
-
         tz0 = self.klass("Europe/Lisbon")
         tz1 = self.klass.no_cache("Europe/Lisbon")
 
