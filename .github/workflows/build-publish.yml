@@ -21,9 +21,9 @@ jobs:
     runs-on: 'ubuntu-latest'
     name: Build sdist
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Setup python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.8'
       - name: Install dependencies
@@ -32,7 +32,7 @@ jobs:
           pip3 install tox
       - name: Build sdist
         run: tox -e build -- -s
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: dist
           path: dist
@@ -48,8 +48,8 @@ jobs:
           - 'manylinux2014_aarch64'
     name: Build a ${{ matrix.platform }} for ${{ matrix.python_tag }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: docker/setup-qemu-action@v1
+      - uses: actions/checkout@v3
+      - uses: docker/setup-qemu-action@v2
         if: ${{ matrix.platform == 'manylinux2014_aarch64' }}
         name: Set up QEMU
       - name: Install docker image
@@ -69,7 +69,7 @@ jobs:
             -v `pwd`:/io "$DOCKER_IMAGE" \
             $PRE_CMD \
             /io/scripts/build_manylinux_wheels.sh
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: dist
           path: dist
@@ -90,12 +90,12 @@ jobs:
 
     name: 'Build wheel: ${{ matrix.os }} ${{ matrix.python_version }} (${{ matrix.arch }})'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Add msbuild to PATH
-        uses: microsoft/setup-msbuild@v1.0.2
+        uses: microsoft/setup-msbuild@v1.3.1
         if: matrix.os == 'windows-latest'
       - name: Setup python
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python_version }}
           architecture: ${{ matrix.arch }}
@@ -110,7 +110,7 @@ jobs:
           CL: ${{ matrix.os == 'windows-latest' && '/WX' || '' }}
         run: |
           tox -e build -- -w
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: dist
           path: dist
@@ -119,12 +119,12 @@ jobs:
     runs-on: 'ubuntu-latest'
     needs: [build_sdist, build_wheel, build_manylinux_wheels]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Set up Python
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v4
       with:
         python-version: '3.x'
-    - uses: actions/download-artifact@v2
+    - uses: actions/download-artifact@v3
       with:
         name: dist
         path: dist
