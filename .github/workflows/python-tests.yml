@@ -8,18 +8,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.6", "3.7", "3.8", "pypy3"]
+        python-version: ["3.7", "3.8", "pypy3"]
         os: ["ubuntu-22.04", "windows-2022", "macos-11"]
         tzdata_extras: ["", "tzdata"]
-        exclude:
-          - python-version: "3.6"
         include:
-          - python-version: "3.6"
-            os: "ubuntu-20.04"
-          - python-version: "3.6"
-            os: "windows-2019"
-          - python-version: "3.6"
-            os: "macos-10.15"
+          - { python-version: "3.6",  os: "windows-2019", tzdata_extras: "" }
+          - { python-version: "3.6",  os: "windows-2019", tzdata_extras: "tzdata" }
+          - { python-version: "3.6",  os: "macos-10.15", tzdata_extras: "" }
+          - { python-version: "3.6",  os: "macos-10.15", tzdata_extras: "tzdata" }
+          - { python-version: "3.6",  os: "ubuntu-20.04", tzdata_extras: "" }
+          - { python-version: "3.6",  os: "ubuntu-20.04", tzdata_extras: "tzdata" }
     env:
       TOXENV: py
       TEST_EXTRAS_TOX: ${{ matrix.tzdata_extras }}
