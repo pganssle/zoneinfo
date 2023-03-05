@@ -6,6 +6,7 @@ jobs:
   tests:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.6", "3.7", "3.8", "pypy3"]
         os: ["ubuntu-22.04", "windows-2022", "macos-11"]
@@ -43,6 +44,7 @@ jobs:
   c_coverage:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.6", "3.7", "3.8"]
         os: ["ubuntu-latest"]
@@ -64,6 +66,7 @@ jobs:
   build:
     runs-on: "ubuntu-latest"
     strategy:
+      fail-fast: false
       matrix:
         cc: ["gcc", "clang"]
     env:
@@ -89,6 +92,7 @@ jobs:
   other:
     runs-on: "ubuntu-latest"
     strategy:
+      fail-fast: false
       matrix:
         toxenv: ["lint", "docs", "mypy"]
     env:
