@@ -85,7 +85,6 @@ if sys.version_info < (3, 8):
         except ValueError:
             return False
 
-
 else:
     _isfile = os.path.isfile
 

@@ -10,6 +10,7 @@ project = "backports.zoneinfo"
 author = "Paul Ganssle"
 copyright = f"2020, {author}"
 
+
 # Read the version information from the _version.py file
 def get_version():
     import ast
