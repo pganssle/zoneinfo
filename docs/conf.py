@@ -71,9 +71,12 @@ intersphinx_mapping = {"python": ("https://docs.python.org/3.9", None)}
 # See http://sphinx-doc.org/ext/extlinks.html
 _repo = "https://github.com/pganssle/zoneinfo/"
 extlinks = {
-    "gh": (_repo + "issues/%s", "GH-"),
-    "gh-pr": (_repo + "pull/%s", "GH-"),
-    "pypi": ("https://pypi.org/project/%s", ""),
-    "bpo": ("https://bugs.python.org/issue%s", "bpo-"),
-    "cpython-pr": ("https://github.com/python/cpython/pull/%s", "CPython PR #"),
+    "gh": (_repo + "issues/%s", "GH-%s"),
+    "gh-pr": (_repo + "pull/%s", "GH-%s"),
+    "pypi": ("https://pypi.org/project/%s", None),
+    "bpo": ("https://bugs.python.org/issue%s", "bpo-%s"),
+    "cpython-pr": (
+        "https://github.com/python/cpython/pull/%s",
+        "CPython PR #%s",
+    ),
 }
