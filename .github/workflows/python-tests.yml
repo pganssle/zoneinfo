@@ -21,7 +21,6 @@ jobs:
     env:
       TOXENV: py
       TEST_EXTRAS_TOX: ${{ matrix.tzdata_extras }}
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     steps:
     - uses: actions/checkout@v3
@@ -35,9 +34,6 @@ jobs:
     - name: Run tests
       run: |
         python -m tox
-    - name: Report coverage
-      run: |
-        tox -e coverage-report,codecov
 
   c_coverage:
     runs-on: ${{ matrix.os }}
@@ -61,7 +57,7 @@ jobs:
           python -m pip install --upgrade pip 'tox>=3.18'
       - name: Run tests
         run: |
-          tox -e gcov,codecov
+          tox -e gcov
 
   build:
     runs-on: "ubuntu-latest"
