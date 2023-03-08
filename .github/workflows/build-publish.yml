@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          pip3 install tox
+          pip3 install 'tox>=4.0'
       - name: Build sdist
         run: tox -e build -- -s
       - uses: actions/upload-artifact@v3
@@ -106,7 +106,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install -U pip
-          pip install -U tox
+          pip install -U 'tox>=3.18'
       - name: Create tox environment
         run: tox -e build --notest
       - name: Build wheel
@@ -135,7 +135,7 @@ jobs:
     - name: Install dependencies
       run: |
         python3 -m pip install --upgrade pip
-        pip3 install tox
+        pip3 install 'tox>=4.0'
     - name: Check that version and tag matches
       if: >-
         startsWith(github.ref, 'refs/tags')
