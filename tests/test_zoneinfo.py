@@ -2014,8 +2014,8 @@ class ZoneDumpData:
             ]
 
         def _America_Santiago():
-            LMT = ZoneOffset("LMT", timedelta(seconds=-16966), ZERO)
-            SMT = ZoneOffset("SMT", timedelta(seconds=-16966), ZERO)
+            LMT = ZoneOffset("LMT", timedelta(seconds=-16965), ZERO)
+            SMT = ZoneOffset("SMT", timedelta(seconds=-16965), ZERO)
             N05 = ZoneOffset("-05", timedelta(seconds=-18000), ZERO)
             N04 = ZoneOffset("-04", timedelta(seconds=-14400), ZERO)
             N03 = ZoneOffset("-03", timedelta(seconds=-10800), ONE_H)
@@ -2059,7 +2059,7 @@ class ZoneDumpData:
             ]
 
         def _Europe_Dublin():
-            LMT = ZoneOffset("LMT", timedelta(seconds=-1500), ZERO)
+            LMT = ZoneOffset("LMT", timedelta(seconds=-1521), ZERO)
             DMT = ZoneOffset("DMT", timedelta(seconds=-1521), ZERO)
             IST_0 = ZoneOffset("IST", timedelta(seconds=2079), ONE_H)
             GMT_0 = ZoneOffset("GMT", ZERO, ZERO)
