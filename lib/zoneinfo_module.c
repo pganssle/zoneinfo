@@ -7,7 +7,7 @@
 
 #include "datetime.h"
 
-#if PY_VERSION_HEX < 0x03070000
+#if PY_VERSION_HEX >= 0x03070000
 #define ATLEAST_37
 #ifdef MS_WINDOWS
 #undef _tzname
