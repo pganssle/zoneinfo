@@ -1,6 +1,6 @@
 import os
 import typing
-from datetime import datetime, tzinfo
+from datetime import datetime, timedelta, tzinfo
 from typing import (
     Any,
     Iterable,
@@ -30,6 +30,9 @@ class ZoneInfo(tzinfo):
     ) -> _T: ...
     @classmethod
     def clear_cache(cls, *, only_keys: Iterable[str] = ...) -> None: ...
+    def tzname(self, __dt: datetime | None) -> str | None: ...
+    def utcoffset(self, __dt: datetime | None) -> timedelta | None: ...
+    def dst(self, __dt: datetime | None) -> timedelta | None: ...
 
 # Note: Both here and in clear_cache, the types allow the use of `str` where
 # a sequence of strings is required. This should be remedied if a solution
