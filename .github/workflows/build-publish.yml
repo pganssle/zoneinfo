@@ -46,11 +46,16 @@ jobs:
           - 'manylinux1_x86_64'
           - 'manylinux1_i686'
           - 'manylinux2014_aarch64'
+          - 'musllinux_1_1_x86_64'
+          - 'musllinux_1_1_i686'
+          - 'musllinux_1_1_aarch64'
     name: Build a ${{ matrix.platform }} for ${{ matrix.python_tag }}
     steps:
       - uses: actions/checkout@v3
       - uses: docker/setup-qemu-action@v2
-        if: ${{ matrix.platform == 'manylinux2014_aarch64' }}
+        if: |
+          matrix.platform == 'manylinux2014_aarch64' ||
+          matrix.platfrom == 'musllinux_1_1_aarch64'
         name: Set up QEMU
       - name: Install docker image
         run: |
