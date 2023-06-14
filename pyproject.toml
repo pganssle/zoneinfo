@@ -1,6 +1,46 @@
 [build-system]
-requires = ["setuptools>=40.8.0", "wheel"]
+requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "backports.zoneinfo"
+description = "Backport of the standard library zoneinfo module"
+readme = {file = "README.md", content-type = "text/markdown"}
+authors = [
+    {name = "Python Software Foundation", email = "datetime-sig@python.org"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+]
+requires-python = ">=3.6"
+dependencies = [
+    "importlib_resources;python_version<\"3.7\"",
+]
+license = {text = "Apache-2.0"}
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/pganssle/zoneinfo"
+Source = "https://github.com/pganssle/zoneinfo"
+Documentation = "https://zoneinfo.readthedocs.io/en/latest/"
+"Bug Reports" = "https://github.com/pganssle/zoneinfo/issues"
+
+[project.optional-dependencies]
+tzdata = [
+    "tzdata",
+]
+
+[tool.setuptools]
+packages = {find = {where = ["src"]}}
+license-files = ["LICENSE", "licenses/LICENSE_APACHE"]
+dynamic = {version = {attr = "backports.zoneinfo._version.__version__"}}
 
 [tool.black]
 line-length = 80
