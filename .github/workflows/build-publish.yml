@@ -15,6 +15,7 @@ on:
   push:
   release:
     types: [created]
+  pull_request:
 
 jobs:
   build_sdist:
@@ -120,6 +121,7 @@ jobs:
           path: dist
 
   deploy:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: 'ubuntu-22.04'
     needs: [build_sdist, build_wheel, build_manylinux_wheels]
     steps:
